@@ -1,15 +1,27 @@
-
-
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import {
   View, Text, TouchableOpacity, ScrollView, StyleSheet,
-  Alert, ActivityIndicator, TextInput, Animated,
+  Alert, ActivityIndicator, TextInput, Animated, Dimensions,
 } from 'react-native'
+import MapView, { Marker, Circle } from 'react-native-maps'
 import Slider from '@react-native-community/slider'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { supabase } from '../../../lib/supabase'
 import { useAuth } from '../../../lib/auth'
 import { useGeofencing } from '../../../hooks/useGeofencing'
+
+// ── Utilidades ───────────────────────────────────────────────────
+const { width: SW } = Dimensions.get('window')
+const RADIO_LLEGADA = 30  // metros: distancia para considerar "frente a la parcela"
+
+function distanciaMetros(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371000
+  const dLat = (lat2 - lat1) * Math.PI / 180
+  const dLng = (lng2 - lng1) * Math.PI / 180
+  const a = Math.sin(dLat / 2) ** 2
+    + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
 
 function evaluarCondicionales(pregunta: any, respuesta: any) {
   const cond = pregunta?.condicionales
@@ -21,13 +33,9 @@ function evaluarCondicionales(pregunta: any, respuesta: any) {
   return cond.reglas[matches.findIndex(Boolean)] || null
 }
 
-const RAZONES_SISTEMA = [
-  'No hay nadie en casa','No quiere participar',
-  'No cumple el perfil buscado','Barrera de idioma','Motivo de salud',
-]
-
-function ProgressBar({ current, total }: { current: number, total: number }) {
-  const pct = total > 0 ? Math.round((current / total) * 100) : 0
+// ── Barra de progreso ─────────────────────────────────────────────
+function ProgressBar({ current, total }: { current: number; total: number }) {
+  const pct = total > 0 ? (current / total) * 100 : 0
   return (
     <View style={ps.wrap}>
       <View style={[ps.fill, { width: `${pct}%` as any }]} />
@@ -39,13 +47,143 @@ const ps = StyleSheet.create({
   fill: { height: 3, backgroundColor: '#1a472a' },
 })
 
+// ── Mapa de navegación ────────────────────────────────────────────
+function MapaNavegacion({
+  parcela,
+  ubicacion,
+  enParcela,
+  stats,
+  onNoHayNadie,
+  onNoParcela,
+}: {
+  parcela: any
+  ubicacion: { lat: number; lng: number } | null
+  enParcela: boolean
+  stats: { total_parcelas: number; completadas: number }
+  onNoHayNadie: () => void
+  onNoParcela: () => void
+}) {
+  const destLat = parcela?.punto_centroide?.lat
+  const destLng = parcela?.punto_centroide?.lng
+  const progreso = stats.total_parcelas > 0
+    ? Math.round((stats.completadas / stats.total_parcelas) * 100)
+    : 0
+
+  return (
+    <View style={{ flex: 1, backgroundColor: '#f2f1ee' }}>
+      {/* Header */}
+      <View style={mn.header}>
+        <Text style={mn.headerLabel}>Dirigite a esta dirección</Text>
+        <Text style={mn.headerDir}>{parcela?.direccion || 'Parcela sin dirección'}</Text>
+        <View style={mn.statsRow}>
+          <Text style={mn.statsText}>{stats.completadas} / {stats.total_parcelas} encuestas</Text>
+          <View style={mn.progBar}>
+            <View style={[mn.progFill, { width: `${progreso}%` as any }]} />
+          </View>
+          <Text style={mn.statsText}>{progreso}%</Text>
+        </View>
+      </View>
+
+      {/* Mapa (no se puede cerrar, ocupa toda la pantalla) */}
+      <View style={{ flex: 1, position: 'relative' }}>
+        {destLat && destLng ? (
+          <MapView
+            style={{ flex: 1 }}
+            initialRegion={{
+              latitude:      ubicacion?.lat  ?? destLat,
+              longitude:     ubicacion?.lng  ?? destLng,
+              latitudeDelta:  0.005,
+              longitudeDelta: 0.005,
+            }}
+            region={ubicacion ? {
+              latitude:      ubicacion.lat,
+              longitude:     ubicacion.lng,
+              latitudeDelta:  0.003,
+              longitudeDelta: 0.003,
+            } : undefined}
+            showsUserLocation
+            showsMyLocationButton
+          >
+            {/* Destino */}
+            <Marker
+              coordinate={{ latitude: destLat, longitude: destLng }}
+              title="Tu próxima parada"
+              description={parcela?.direccion}
+              pinColor="#1a472a"
+            />
+            {/* Radio de llegada */}
+            <Circle
+              center={{ latitude: destLat, longitude: destLng }}
+              radius={RADIO_LLEGADA}
+              fillColor="rgba(26,71,42,0.15)"
+              strokeColor="rgba(26,71,42,0.5)"
+              strokeWidth={2}
+            />
+          </MapView>
+        ) : (
+          <View style={mn.sinMapa}>
+            <Text style={{ fontSize: 40 }}>📍</Text>
+            <Text style={{ color: '#666', marginTop: 8 }}>Calculando posición...</Text>
+          </View>
+        )}
+
+        {/* Badge de llegada */}
+        {enParcela && (
+          <View style={mn.llegadaBadge}>
+            <Text style={mn.llegadaText}>✅ Estás frente a la parcela</Text>
+            <Text style={mn.llegadaSub}>Tocá la puerta y presioná "Comenzar"</Text>
+          </View>
+        )}
+
+        {/* Distancia */}
+        {!enParcela && ubicacion && destLat && destLng && (
+          <View style={mn.distBadge}>
+            <Text style={mn.distText}>
+              {Math.round(distanciaMetros(ubicacion.lat, ubicacion.lng, destLat, destLng))} m
+            </Text>
+          </View>
+        )}
+      </View>
+
+      {/* Botones de contingencia */}
+      <View style={mn.footer}>
+        <TouchableOpacity style={mn.btnContingencia} onPress={onNoHayNadie}>
+          <Text style={mn.btnContText}>🚪 No hay nadie</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={mn.btnContingencia} onPress={onNoParcela}>
+          <Text style={mn.btnContText}>🏚️ No es una vivienda</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  )
+}
+
+const mn = StyleSheet.create({
+  header:       { backgroundColor: '#1a472a', padding: 20, paddingTop: 52 },
+  headerLabel:  { fontSize: 11, fontWeight: '700', color: '#a7f3d0', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 },
+  headerDir:    { fontSize: 20, fontWeight: '800', color: '#fff', marginBottom: 12 },
+  statsRow:     { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  statsText:    { fontSize: 12, color: '#a7f3d0', fontWeight: '600' },
+  progBar:      { flex: 1, height: 4, backgroundColor: 'rgba(255,255,255,.2)', borderRadius: 2 },
+  progFill:     { height: 4, backgroundColor: '#a7f3d0', borderRadius: 2 },
+  sinMapa:      { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  llegadaBadge: { position: 'absolute', bottom: 100, left: 16, right: 16, backgroundColor: '#fff', borderRadius: 16, padding: 16, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: .15, shadowRadius: 12, elevation: 8 },
+  llegadaText:  { fontSize: 16, fontWeight: '800', color: '#1a472a', marginBottom: 4 },
+  llegadaSub:   { fontSize: 13, color: '#666' },
+  distBadge:    { position: 'absolute', top: 16, alignSelf: 'center', backgroundColor: 'rgba(0,0,0,.65)', borderRadius: 100, paddingHorizontal: 16, paddingVertical: 8 },
+  distText:     { color: '#fff', fontWeight: '700', fontSize: 14 },
+  footer:       { flexDirection: 'row', gap: 10, padding: 16, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#e5e7eb' },
+  btnContingencia: { flex: 1, backgroundColor: '#f9fafb', borderRadius: 12, padding: 14, alignItems: 'center', borderWidth: 1.5, borderColor: '#e5e7eb' },
+  btnContText:  { fontSize: 13, fontWeight: '600', color: '#374151' },
+})
+
+// ── PreguntaCard ──────────────────────────────────────────────────
 function PreguntaCard({ pregunta, respuesta, onChange, onSiguiente, onAnterior, paso, total, saving }: any) {
   const slideAnim = useRef(new Animated.Value(40)).current
   const opacAnim  = useRef(new Animated.Value(0)).current
 
   useEffect(() => {
-    slideAnim.setValue(40)
-    opacAnim.setValue(0)
+    slideAnim.setValue(40); opacAnim.setValue(0)
     Animated.parallel([
       Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true, tension: 65, friction: 10 }),
       Animated.timing(opacAnim,  { toValue: 1, duration: 220, useNativeDriver: true }),
@@ -63,11 +201,10 @@ function PreguntaCard({ pregunta, respuesta, onChange, onSiguiente, onAnterior, 
       </Text>
       <Text style={s.pregTexto}>{pregunta.texto}</Text>
 
-      {/* Sí / No */}
       {pregunta.tipo === 'si_no' && (
         <View style={{ gap: 10, marginTop: 8 }}>
           {['Sí', 'No'].map(op => (
-            <TouchableOpacity key={op} style={[s.opcionBtn, respuesta === op && s.opcionSel]} onPress={() => onChange(op === 'Sí' ? 'Sí' : 'No')}>
+            <TouchableOpacity key={op} style={[s.opcionBtn, respuesta === op && s.opcionSel]} onPress={() => onChange(op)}>
               <View style={[s.opcionCheck, respuesta === op && s.opcionCheckSel]}>
                 {respuesta === op && <Text style={{ color: '#fff', fontSize: 11, fontWeight: '800' }}>✓</Text>}
               </View>
@@ -77,7 +214,6 @@ function PreguntaCard({ pregunta, respuesta, onChange, onSiguiente, onAnterior, 
         </View>
       )}
 
-      {/* Opción múltiple */}
       {pregunta.tipo === 'opcion_multiple' && (
         <View style={{ gap: 10, marginTop: 8 }}>
           {opciones.map((op: any) => (
@@ -91,7 +227,6 @@ function PreguntaCard({ pregunta, respuesta, onChange, onSiguiente, onAnterior, 
         </View>
       )}
 
-      {/* Escala 1-10 (no edad) */}
       {pregunta.tipo === 'escala' && !esEdad && (
         <View style={{ marginTop: 12 }}>
           <View style={s.escalaGrid}>
@@ -108,46 +243,24 @@ function PreguntaCard({ pregunta, respuesta, onChange, onSiguiente, onAnterior, 
         </View>
       )}
 
-      {/* Edad — slider */}
       {pregunta.tipo === 'escala' && esEdad && (
         <View style={{ marginTop: 16 }}>
           <Text style={{ fontSize: 56, fontWeight: '800', color: '#1a472a', textAlign: 'center', letterSpacing: -2, marginBottom: 4 }}>
             {respuesta ?? '--'}
           </Text>
           <Text style={{ fontSize: 12, color: '#aaa', textAlign: 'center', marginBottom: 20 }}>años</Text>
-          <Slider
-            style={{ width: '100%', height: 40 }}
-            minimumValue={18}
-            maximumValue={99}
-            step={1}
-            value={respuesta || 18}
-            onValueChange={(v: number) => onChange(Math.round(v))}
-            minimumTrackTintColor="#1a472a"
-            maximumTrackTintColor="#e5e7eb"
-            thumbTintColor="#1a472a"
-          />
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
-            <Text style={{ fontSize: 11, color: '#aaa' }}>18</Text>
-            <Text style={{ fontSize: 11, color: '#aaa' }}>99</Text>
-          </View>
+          <Slider style={{ width: '100%', height: 40 }} minimumValue={18} maximumValue={99} step={1}
+            value={respuesta || 18} onValueChange={(v: number) => onChange(Math.round(v))}
+            minimumTrackTintColor="#1a472a" maximumTrackTintColor="#e5e7eb" thumbTintColor="#1a472a" />
         </View>
       )}
 
-      {/* Texto libre */}
       {pregunta.tipo === 'texto_libre' && (
-        <TextInput
-          style={s.textarea}
-          multiline
-          numberOfLines={5}
-          placeholder="Escribí tu respuesta..."
-          placeholderTextColor="#bbb"
-          value={respuesta || ''}
-          onChangeText={onChange}
-          textAlignVertical="top"
-        />
+        <TextInput style={s.textarea} multiline numberOfLines={5}
+          placeholder="Escribí tu respuesta..." placeholderTextColor="#bbb"
+          value={respuesta || ''} onChangeText={onChange} textAlignVertical="top" />
       )}
 
-      {/* Navegación */}
       <View style={s.navRow}>
         {paso > 0 && (
           <TouchableOpacity style={s.btnSecondary} onPress={onAnterior}>
@@ -166,29 +279,43 @@ function PreguntaCard({ pregunta, respuesta, onChange, onSiguiente, onAnterior, 
   )
 }
 
-export default function EncuestaScreen() {
-  const { id, asignacion } = useLocalSearchParams<{ id: string; asignacion: string }>()
-  const { perfil }         = useAuth()
-  const router             = useRouter()
-  const { ubicacion }      = useGeofencing(perfil?.id || '', perfil?.organizacion_id || '')
+// ── Pantalla principal ────────────────────────────────────────────
+type Pantalla = 'mapa' | 'inicio' | 'participa' | 'encuesta' | 'no_responde' | 'fin'
 
+export default function EncuestaScreen() {
+  const { id, asignacion, zona } = useLocalSearchParams<{ id: string; asignacion: string; zona: string }>()
+  const { perfil }   = useAuth()
+  const router       = useRouter()
+  const { ubicacion } = useGeofencing(perfil?.id || '', perfil?.organizacion_id || '')
+
+  // Datos de encuesta
   const [encuesta,   setEncuesta]   = useState<any>(null)
   const [preguntas,  setPreguntas]  = useState<any[]>([])
-  const [razonesNR,  setRazonesNR]  = useState<string[]>(RAZONES_SISTEMA)
+  const [razonesNR,  setRazonesNR]  = useState<string[]>([])
   const [loading,    setLoading]    = useState(true)
-  const [saving,     setSaving]     = useState(false)
-  const [pantalla,   setPantalla]   = useState<'inicio'|'participa'|'encuesta'|'no_responde'|'fin'>('inicio')
+
+  // Navegación
+  const [parcela,    setParcela]    = useState<any>(null)   // próxima parcela
+  const [loadingP,   setLoadingP]   = useState(false)
+
+  // Estado de encuesta
+  const [pantalla,   setPantalla]   = useState<Pantalla>('mapa')
   const [paso,       setPaso]       = useState(0)
   const [respuestas, setRespuestas] = useState<Record<string, any>>({})
   const [razonNR,    setRazonNR]    = useState('')
-  const [noResponde, setNoResponde] = useState(false)
   const [ocultas,    setOcultas]    = useState(new Set<string>())
+  const [saving,     setSaving]     = useState(false)
+  const [noResponde, setNoResponde] = useState(false)
 
+  // ── Carga inicial ──
   useEffect(() => {
-    if (id && perfil?.organizacion_id) load()
+    if (id && perfil?.organizacion_id) {
+      cargarEncuesta()
+      cargarProximaParcela()
+    }
   }, [id, perfil?.organizacion_id])
 
-  async function load() {
+  async function cargarEncuesta() {
     const { data } = await supabase.rpc('get_encuesta_full', {
       p_encuesta_id: id,
       p_org_id: perfil?.organizacion_id,
@@ -199,8 +326,7 @@ export default function EncuestaScreen() {
       const ids = data.encuesta?.config_muestreo?.razones_seleccionadas || []
       if (ids.length >= 2) {
         const { data: rData } = await supabase
-          .from('razones_no_respuesta')
-          .select('id, label').in('id', ids).eq('activa', true)
+          .from('razones_no_respuesta').select('id, label').in('id', ids).eq('activa', true)
         if (rData) {
           const map: Record<string, string> = Object.fromEntries(rData.map((r: any) => [r.id, r.label]))
           setRazonesNR(ids.map((i: string) => map[i]).filter(Boolean))
@@ -210,19 +336,57 @@ export default function EncuestaScreen() {
     setLoading(false)
   }
 
+  async function cargarProximaParcela() {
+    if (!asignacion) return
+    setLoadingP(true)
+    const { data, error } = await supabase.rpc('get_proxima_parcela', {
+      p_asignacion_id: asignacion,
+    })
+    if (!error && data?.length > 0) setParcela(data[0])
+    else if (!error) setParcela(null)  // sin más parcelas
+    setLoadingP(false)
+  }
+
+  // ── Detección de llegada a la parcela ──
+  const enParcela = useMemo(() => {
+    if (!ubicacion || !parcela?.punto_centroide) return false
+    const d = distanciaMetros(
+      ubicacion.lat, ubicacion.lng,
+      parcela.punto_centroide.lat, parcela.punto_centroide.lng
+    )
+    return d <= RADIO_LLEGADA
+  }, [ubicacion, parcela])
+
+  // ── Preguntas ──
   const todasLasPreguntas = useMemo(() =>
     preguntas.filter(p => p.clave_base !== 'participa').sort((a: any, b: any) => a.orden - b.orden),
     [preguntas]
   )
   const preguntaParticipa = useMemo(() => preguntas.find(p => p.clave_base === 'participa'), [preguntas])
   const preguntasVisibles = useMemo(() =>
-    todasLasPreguntas.filter(p => !ocultas.has(p.id)),
-    [todasLasPreguntas, ocultas]
+    todasLasPreguntas.filter(p => !ocultas.has(p.id)), [todasLasPreguntas, ocultas]
   )
-
   const preguntaActual = preguntasVisibles[paso]
   const totalVisible   = preguntasVisibles.length
 
+  // ── Registrar visita fallida y pasar a la siguiente parcela ──
+  async function registrarNoVisita(resultado: string) {
+    if (parcela?.parcela_id) {
+      await supabase.rpc('registrar_visita', {
+        p_parcela_id:  parcela.parcela_id,
+        p_resultado:   resultado,
+        p_latitud:     ubicacion?.lat ?? null,
+        p_longitud:    ubicacion?.lng ?? null,
+      })
+    }
+    // Resetear y cargar siguiente
+    setRespuestas({}); setRazonNR(''); setNoResponde(false)
+    setPaso(0); setOcultas(new Set())
+    await cargarProximaParcela()
+    setPantalla('mapa')
+  }
+
+  // ── Navegación preguntas ──
   function handleSiguiente() {
     const resp   = respuestas[preguntaActual?.id]
     const result = evaluarCondicionales(preguntaActual, resp)
@@ -238,88 +402,105 @@ export default function EncuestaScreen() {
     else guardarYFinalizar()
   }
 
-  function handleAnterior() {
-    if (paso > 0) setPaso(p => p - 1)
-  }
-
+  // ── Guardar respuestas ──
   async function guardarYFinalizar(razon?: string) {
-  setSaving(true)
-  try {
-    const filas = Object.entries(respuestas).map(([pregunta_id, valor]) => ({
-      pregunta_id,
-      opcion_id: typeof valor === 'string' && valor.startsWith('op_') 
-                 ? valor.replace('op_', '') 
-                 : null,
-      valor_texto: (typeof valor === 'string' && !valor.startsWith('op_')) 
-                   ? String(valor) 
-                   : null,
-      valor_numero: typeof valor === 'number' ? valor : null,
-      valor_booleano: typeof valor === 'boolean' ? valor : null,
-    }));
+    setSaving(true)
+    try {
+      const filas = Object.entries(respuestas).map(([pregunta_id, valor]) => ({
+        pregunta_id,
+        opcion_id:     typeof valor === 'string' && valor.length === 36 ? valor : null,
+        valor_texto:   (typeof valor === 'string' && valor.length !== 36) ? valor : null,
+        valor_numero:  typeof valor === 'number' ? valor : null,
+        valor_booleano: typeof valor === 'boolean' ? valor : null,
+      }))
+      if (razon && preguntaParticipa) {
+        filas.push({ pregunta_id: preguntaParticipa.id, opcion_id: null, valor_texto: razon, valor_numero: null, valor_booleano: null })
+      }
 
-    // Agregar razón de no respuesta
-    if (razon && preguntaParticipa) {
-      filas.push({
-        pregunta_id: preguntaParticipa.id,
-        opcion_id: null,
-        valor_texto: razon,
-        valor_numero: null,
-        valor_booleano: null,
-      });
+      const { data: sesionId, error } = await supabase.rpc('guardar_encuesta_completa', {
+        p_asignacion_id:       asignacion,
+        p_latitud:             ubicacion?.lat ?? null,
+        p_longitud:            ubicacion?.lng ?? null,
+        p_respuestas:          filas,
+        p_razon_no_respuesta:  razon || null,
+        p_participa_pregunta_id: preguntaParticipa?.id || null,
+      })
+      if (error || !sesionId) throw error
+
+      // Registrar visita como completada
+      if (parcela?.parcela_id) {
+        await supabase.rpc('registrar_visita', {
+          p_parcela_id: parcela.parcela_id,
+          p_resultado:  'completada',
+          p_latitud:    ubicacion?.lat ?? null,
+          p_longitud:   ubicacion?.lng ?? null,
+          p_sesion_id:  sesionId,
+        })
+      }
+
+      setNoResponde(!!razon)
+      setPantalla('fin')
+    } catch (err: any) {
+      Alert.alert('Error', err?.message || 'No se pudo guardar la encuesta')
+    } finally {
+      setSaving(false)
     }
-
-    console.log('🔥 Payload final enviado:', JSON.stringify(filas, null, 2));
-
-    const { data: sesionId, error } = await supabase.rpc('guardar_encuesta_completa', {
-      p_asignacion_id: asignacion,
-      p_latitud: ubicacion?.lat ?? null,
-      p_longitud: ubicacion?.lng ?? null,
-      p_respuestas: filas,
-      p_razon_no_respuesta: razon || null,
-      p_participa_pregunta_id: preguntaParticipa?.id || null,
-    })
-
-    if (error || !sesionId) throw error
-
-    setNoResponde(!!razon)
-    setPantalla('fin')
-  } catch (err: any) {
-    console.error('❌ Error crítico:', err)
-    Alert.alert('Error', err?.message || 'No se pudo guardar la encuesta')
-  } finally {
-    setSaving(false)
   }
-}
 
+  // ── Continuar al siguiente después del fin ──
+  async function continuarSiguiente() {
+    setRespuestas({}); setRazonNR(''); setNoResponde(false)
+    setPaso(0); setOcultas(new Set()); setPantalla('mapa')
+    await cargarProximaParcela()
+  }
+
+  // ══════════════════ RENDER ══════════════════
   if (loading) return (
     <View style={s.centered}><ActivityIndicator size="large" color="#1a472a" /></View>
   )
 
-  // ── INICIO ──
-  if (pantalla === 'inicio') return (
-    <View style={s.container}>
-      <View style={s.inicioInner}>
-        <Text style={s.encLabel}>Encuesta</Text>
-        <Text style={s.encNombre}>{encuesta?.nombre}</Text>
-        {encuesta?.descripcion && <Text style={s.encDesc}>{encuesta.descripcion}</Text>}
-        <View style={s.countBadge}>
-          <Text style={s.countText}>{totalVisible} preguntas</Text>
-        </View>
-        <View style={s.inicioBtns}>
+  // ── MAPA (navegación a la parcela) ──
+  if (pantalla === 'mapa') {
+    if (loadingP) return (
+      <View style={s.centered}>
+        <ActivityIndicator size="large" color="#1a472a" />
+        <Text style={{ marginTop: 12, color: '#666' }}>Calculando próxima parada...</Text>
+      </View>
+    )
+
+    if (!parcela) return (
+      <View style={s.centered}>
+        <Text style={{ fontSize: 48, marginBottom: 16 }}>🎉</Text>
+        <Text style={[s.finTitle, { marginBottom: 12 }]}>¡Zona completada!</Text>
+        <Text style={s.finDesc}>No quedan más parcelas para visitar en esta zona.</Text>
+        <TouchableOpacity style={s.btnComenzar} onPress={() => router.back()}>
+          <Text style={s.btnComenzarText}>← Volver al inicio</Text>
+        </TouchableOpacity>
+      </View>
+    )
+
+    return (
+      <View style={{ flex: 1 }}>
+        <MapaNavegacion
+          parcela={parcela}
+          ubicacion={ubicacion}
+          enParcela={enParcela}
+          stats={{ total_parcelas: parcela.total_parcelas, completadas: parcela.completadas }}
+          onNoHayNadie={() => registrarNoVisita('no_hay_nadie')}
+          onNoParcela={() => registrarNoVisita('no_es_vivienda')}
+        />
+        {/* Botón comenzar — solo visible cuando está frente a la parcela */}
+        {enParcela && (
           <TouchableOpacity
-            style={s.btnComenzar}
+            style={s.btnFlotante}
             onPress={() => preguntaParticipa ? setPantalla('participa') : setPantalla('encuesta')}
           >
-            <Text style={s.btnComenzarText}>Comenzar</Text>
-            <Text style={s.btnComenzarArrow}>→</Text>
+            <Text style={s.btnFlotanteText}>Comenzar encuesta →</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={s.btnCancelar} onPress={() => router.back()}>
-            <Text style={s.btnCancelarText}>Cancelar</Text>
-          </TouchableOpacity>
-        </View>
+        )}
       </View>
-    </View>
-  )
+    )
+  }
 
   // ── PARTICIPA ──
   if (pantalla === 'participa') return (
@@ -330,20 +511,19 @@ export default function EncuestaScreen() {
         <Text style={s.pregTexto}>{preguntaParticipa?.texto}</Text>
         <View style={{ gap: 10, marginTop: 8 }}>
           {['Sí', 'No'].map(op => (
-            <TouchableOpacity
-              key={op}
-              style={s.opcionBtn}
-              onPress={() => {
-                setRespuestas(r => ({ ...r, [preguntaParticipa!.id]: op }))
-                if (op === 'No') setPantalla('no_responde')
-                else { setPaso(0); setPantalla('encuesta') }
-              }}
-            >
+            <TouchableOpacity key={op} style={s.opcionBtn} onPress={() => {
+              setRespuestas(r => ({ ...r, [preguntaParticipa!.id]: op }))
+              if (op === 'No') setPantalla('no_responde')
+              else { setPaso(0); setPantalla('encuesta') }
+            }}>
               <View style={s.opcionCheck} />
               <Text style={s.opcionText}>{op}</Text>
             </TouchableOpacity>
           ))}
         </View>
+        <TouchableOpacity style={[s.btnSecondary, { marginTop: 24 }]} onPress={() => setPantalla('mapa')}>
+          <Text style={s.btnSecondaryText}>← Volver al mapa</Text>
+        </TouchableOpacity>
       </ScrollView>
     </View>
   )
@@ -354,7 +534,7 @@ export default function EncuestaScreen() {
       <ProgressBar current={0} total={1} />
       <ScrollView contentContainerStyle={{ padding: 24, paddingTop: 40 }}>
         <Text style={s.pregLabel}>📋 Registrar no-respuesta</Text>
-        <Text style={s.pregTexto}>¿Cuál es la razón de no participación?</Text>
+        <Text style={s.pregTexto}>¿Cuál es la razón?</Text>
         <View style={{ gap: 10, marginTop: 8 }}>
           {razonesNR.map(r => (
             <TouchableOpacity key={r} style={[s.opcionBtn, razonNR === r && s.opcionSel]} onPress={() => setRazonNR(r)}>
@@ -374,7 +554,7 @@ export default function EncuestaScreen() {
             disabled={!razonNR || saving}
             onPress={() => guardarYFinalizar(razonNR)}
           >
-            <Text style={s.btnPrimaryText}>{saving ? 'Guardando...' : 'Registrar y salir'}</Text>
+            <Text style={s.btnPrimaryText}>{saving ? 'Guardando...' : 'Registrar y continuar'}</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -385,16 +565,13 @@ export default function EncuestaScreen() {
   if (pantalla === 'encuesta' && preguntaActual) return (
     <View style={s.container}>
       <ProgressBar current={paso} total={totalVisible} />
-      <ScrollView
-        contentContainerStyle={{ padding: 24, paddingTop: 32, paddingBottom: 48 }}
-        keyboardShouldPersistTaps="handled"
-      >
+      <ScrollView contentContainerStyle={{ padding: 24, paddingTop: 32, paddingBottom: 48 }} keyboardShouldPersistTaps="handled">
         <PreguntaCard
           pregunta={preguntaActual}
           respuesta={respuestas[preguntaActual.id]}
           onChange={(v: any) => setRespuestas(r => ({ ...r, [preguntaActual.id]: v }))}
           onSiguiente={handleSiguiente}
-          onAnterior={handleAnterior}
+          onAnterior={() => { if (paso > 0) setPaso(p => p - 1) }}
           paso={paso}
           total={totalVisible}
           saving={saving}
@@ -407,14 +584,14 @@ export default function EncuestaScreen() {
   return (
     <View style={s.centered}>
       <Text style={{ fontSize: 64, marginBottom: 16 }}>{noResponde ? '📝' : '✅'}</Text>
-      <Text style={s.finTitle}>{noResponde ? 'Registrado' : '¡Gracias!'}</Text>
+      <Text style={s.finTitle}>{noResponde ? 'Registrado' : '¡Encuesta completada!'}</Text>
       <Text style={s.finDesc}>
         {noResponde
-          ? 'La razón de no-respuesta fue registrada correctamente.'
-          : 'La encuesta fue completada y enviada al panel central.'}
+          ? 'La razón de no-respuesta fue registrada.'
+          : 'Las respuestas fueron enviadas al panel central.'}
       </Text>
-      <TouchableOpacity style={s.btnComenzar} onPress={() => router.back()}>
-        <Text style={s.btnComenzarText}>← Volver a encuestas</Text>
+      <TouchableOpacity style={s.btnComenzar} onPress={continuarSiguiente}>
+        <Text style={s.btnComenzarText}>Siguiente parcela →</Text>
       </TouchableOpacity>
     </View>
   )
@@ -423,18 +600,6 @@ export default function EncuestaScreen() {
 const s = StyleSheet.create({
   container:        { flex: 1, backgroundColor: '#f2f1ee' },
   centered:         { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f2f1ee', padding: 32 },
-  inicioInner:      { flex: 1, padding: 32, justifyContent: 'center' },
-  encLabel:         { fontSize: 11, fontWeight: '700', color: '#1a472a', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 },
-  encNombre:        { fontSize: 26, fontWeight: '800', color: '#111', marginBottom: 12, lineHeight: 32 },
-  encDesc:          { fontSize: 15, color: '#666', marginBottom: 24, lineHeight: 22 },
-  countBadge:       { backgroundColor: '#d8f3dc', borderRadius: 100, paddingHorizontal: 14, paddingVertical: 6, alignSelf: 'flex-start', marginBottom: 32 },
-  countText:        { fontSize: 12, fontWeight: '700', color: '#1a472a' },
-  inicioBtns:       { gap: 10 },
-  btnComenzar:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#1a472a', borderRadius: 14, paddingVertical: 18, paddingHorizontal: 22 },
-  btnComenzarText:  { color: '#fff', fontSize: 16, fontWeight: '800' },
-  btnComenzarArrow: { color: '#d8f3dc', fontSize: 22, fontWeight: '800' },
-  btnCancelar:      { alignItems: 'center', paddingVertical: 12 },
-  btnCancelarText:  { color: '#aaa', fontSize: 14, fontWeight: '600' },
   cardWrap:         { flex: 1 },
   pregLabel:        { fontSize: 11, fontWeight: '700', color: '#1a472a', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 12 },
   pregTexto:        { fontSize: 22, fontWeight: '800', color: '#111', marginBottom: 28, lineHeight: 30 },
@@ -456,7 +621,10 @@ const s = StyleSheet.create({
   btnPrimaryText:   { color: '#fff', fontSize: 16, fontWeight: '800' },
   btnSecondary:     { flex: 1, borderRadius: 14, padding: 18, alignItems: 'center', borderWidth: 2, borderColor: '#e5e7eb', backgroundColor: '#fff' },
   btnSecondaryText: { color: '#666', fontSize: 15, fontWeight: '600' },
+  btnComenzar:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#1a472a', borderRadius: 14, paddingVertical: 18, paddingHorizontal: 32, marginTop: 8 },
+  btnComenzarText:  { color: '#fff', fontSize: 16, fontWeight: '800' },
+  btnFlotante:      { position: 'absolute', bottom: 100, left: 24, right: 24, backgroundColor: '#1a472a', borderRadius: 16, padding: 20, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: .25, shadowRadius: 16, elevation: 12 },
+  btnFlotanteText:  { color: '#fff', fontSize: 18, fontWeight: '800' },
   finTitle:         { fontSize: 26, fontWeight: '800', color: '#111', marginBottom: 12, textAlign: 'center' },
   finDesc:          { fontSize: 15, color: '#666', marginBottom: 40, textAlign: 'center', lineHeight: 22 },
 })
-
