@@ -1,14 +1,15 @@
 {
   "expo": {
-    "name": "metr1ka-app",
-    "slug": "metr1ka-app",
+    "name": "METR1KA",
+    "slug": "metr1ka",
+    "scheme": "metr1ka",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/isotipo-transparente.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/isotipo-transparente.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
@@ -17,14 +18,20 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/isotipo-transparente.png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
     },
     "web": {
-      "favicon": "./assets/favicon.png"
-    }
+      "bundler": "metro",
+      "favicon": "./assets/isotipo-transparente.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-location",
+      "expo-secure-store"
+    ]
   }
 }
