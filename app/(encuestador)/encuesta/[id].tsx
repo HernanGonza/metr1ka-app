@@ -12,7 +12,7 @@ import { useGeofencing } from '../../../hooks/useGeofencing'
 
 // ── Utilidades ───────────────────────────────────────────────────
 const { width: SW } = Dimensions.get('window')
-const RADIO_LLEGADA = 30  // metros: distancia para considerar "frente a la parcela"
+const RADIO_LLEGADA = 99999  // TEST: radio extendido para probar desde casa
 
 function distanciaMetros(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 6371000
@@ -355,7 +355,9 @@ export default function EncuestaScreen() {
 
   // ── Detección de llegada a la parcela ──
   const enParcela = useMemo(() => {
-    if (!ubicacion || !parcela?.punto_centroide) return false
+    // TEST: siempre true para pruebas sin GPS
+    if (!parcela?.punto_centroide) return true  // sin parcela cargada, mostrar botón igual
+    if (!ubicacion) return true  // sin GPS, mostrar botón igual
     const d = distanciaMetros(
       ubicacion.lat, ubicacion.lng,
       parcela.punto_centroide.lat, parcela.punto_centroide.lng
