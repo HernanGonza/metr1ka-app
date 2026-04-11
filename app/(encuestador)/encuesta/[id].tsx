@@ -192,7 +192,9 @@ function PreguntaCard({ pregunta, respuesta, onChange, onSiguiente, onAnterior, 
 
   const opciones     = [...(pregunta.opciones_pregunta || [])].sort((a: any, b: any) => a.orden - b.orden)
   const esEdad       = pregunta.clave_base === 'edad'
-  const puedeAvanzar = !pregunta.requerida || (respuesta !== null && respuesta !== undefined && respuesta !== '')
+  // Para opcion_multiple el valor es un objeto {opcionId, texto}
+  const tieneRespuesta = respuesta !== null && respuesta !== undefined && respuesta !== ''
+  const puedeAvanzar = !pregunta.requerida || tieneRespuesta
 
   return (
     <Animated.View style={[s.cardWrap, { opacity: opacAnim, transform: [{ translateY: slideAnim }] }]}>
@@ -216,14 +218,18 @@ function PreguntaCard({ pregunta, respuesta, onChange, onSiguiente, onAnterior, 
 
       {pregunta.tipo === 'opcion_multiple' && (
         <View style={{ gap: 10, marginTop: 8 }}>
-          {opciones.map((op: any) => (
-            <TouchableOpacity key={op.id} style={[s.opcionBtn, respuesta === op.id && s.opcionSel]} onPress={() => onChange(op.id)}>
-              <View style={[s.opcionCheck, respuesta === op.id && s.opcionCheckSel]}>
-                {respuesta === op.id && <Text style={{ color: '#fff', fontSize: 11, fontWeight: '800' }}>✓</Text>}
-              </View>
-              <Text style={[s.opcionText, respuesta === op.id && s.opcionTextSel]}>{op.texto}</Text>
-            </TouchableOpacity>
-          ))}
+          {opciones.map((op: any) => {
+            const selId = respuesta?.opcionId ?? respuesta
+            return (
+              <TouchableOpacity key={op.id} style={[s.opcionBtn, selId === op.id && s.opcionSel]}
+                onPress={() => onChange({ opcionId: op.id, texto: op.texto })}>
+                <View style={[s.opcionCheck, selId === op.id && s.opcionCheckSel]}>
+                  {selId === op.id && <Text style={{ color: '#fff', fontSize: 11, fontWeight: '800' }}>✓</Text>}
+                </View>
+                <Text style={[s.opcionText, selId === op.id && s.opcionTextSel]}>{op.texto}</Text>
+              </TouchableOpacity>
+            )
+          })}
         </View>
       )}
 
@@ -406,13 +412,21 @@ export default function EncuestaScreen() {
   async function guardarYFinalizar(razon?: string) {
     setSaving(true)
     try {
-      const filas = Object.entries(respuestas).map(([pregunta_id, valor]) => ({
-        pregunta_id,
-        opcion_id:     typeof valor === 'string' && valor.length === 36 ? valor : null,
-        valor_texto:   (typeof valor === 'string' && valor.length !== 36) ? valor : null,
-        valor_numero:  typeof valor === 'number' ? valor : null,
-        valor_booleano: typeof valor === 'boolean' ? valor : null,
-      }))
+      const filas = Object.entries(respuestas).map(([pregunta_id, valor]) => {
+        // valor puede ser: string (si_no/texto), number (escala), boolean, o {opcionId, texto} (opcion_multiple)
+        const esOpcion = valor !== null && typeof valor === 'object' && 'opcionId' in valor
+        return {
+          pregunta_id,
+          opcion_id:      esOpcion ? valor.opcionId : null,
+          valor_texto:    esOpcion
+                            ? valor.texto                        // texto legible de la opción
+                            : typeof valor === 'string'
+                              ? valor
+                              : null,
+          valor_numero:   typeof valor === 'number' ? valor : null,
+          valor_booleano: typeof valor === 'boolean' ? valor : null,
+        }
+      })
       if (razon && preguntaParticipa) {
         filas.push({ pregunta_id: preguntaParticipa.id, opcion_id: null, valor_texto: razon, valor_numero: null, valor_booleano: null })
       }
@@ -425,7 +439,8 @@ export default function EncuestaScreen() {
         p_razon_no_respuesta:  razon || null,
         p_participa_pregunta_id: preguntaParticipa?.id || null,
       })
-      if (error || !sesionId) throw error
+      if (error) throw new Error(error.message || JSON.stringify(error))
+      if (!sesionId) throw new Error('No se recibió ID de sesión — verificá la asignación')
 
       // Registrar visita como completada
       if (parcela?.parcela_id) {
