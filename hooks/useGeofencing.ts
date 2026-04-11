@@ -3,23 +3,24 @@ import { pedirPermisoUbicacion, getUbicacionActual, actualizarUbicacion } from '
 import { supabase } from '../lib/supabase'
 import { puntoEnPoligono } from '../lib/location'
 
-// Zona activa: la encuesta cuya zona contiene la ubicación actual
 export type ZonaActiva = {
   zona_id: string
   encuesta_id: string
   encuesta_nombre: string
-  zona_geojson: any
+  area_geojson: any        // el campo real que devuelve get_zonas_encuestador
+  geofencing_activo: boolean
+  equipo_id: string
 }
 
 export function useGeofencing(encuestadorId: string, organizacionId: string) {
-  const [permiso,      setPermiso]      = useState<boolean | null>(null)
-  const [ubicacion,    setUbicacion]    = useState<{ lat: number; lng: number } | null>(null)
-  const [zonas,        setZonas]        = useState<ZonaActiva[]>([])   // todas las zonas del encuestador
-  const [zonaActual,   setZonaActual]   = useState<ZonaActiva | null>(null) // zona en la que está ahora
-  const [bloqueado,    setBloqueado]    = useState<boolean | null>(null)    // null = calculando
-  const intervalRef = useRef<any>(null)
+  const [permiso,    setPermiso]    = useState<boolean | null>(null)
+  const [ubicacion,  setUbicacion]  = useState<{ lat: number; lng: number } | null>(null)
+  const [zonas,      setZonas]      = useState<ZonaActiva[]>([])
+  const [zonaActual, setZonaActual] = useState<ZonaActiva | null>(null)
+  const [bloqueado,  setBloqueado]  = useState<boolean | null>(null)  // null = todavia calculando
+  const intervalRef  = useRef<any>(null)
+  const zonasRef     = useRef<ZonaActiva[]>([])  // ref para acceder en el closure del interval
 
-  // Cargar zonas via get_zonas_encuestador (nueva función del modelo encuesta_zonas)
   useEffect(() => {
     if (!encuestadorId) return
     fetchZonas()
@@ -30,13 +31,15 @@ export function useGeofencing(encuestadorId: string, organizacionId: string) {
       p_encuestador_id: encuestadorId,
     })
     if (error) {
-      console.error('fetchZonas error:', error.message)
+      console.error('[geofencing] fetchZonas error:', error.message)
       return
     }
-    setZonas(data || [])
+    const lista = data || []
+    zonasRef.current = lista
+    setZonas(lista)
   }
 
-  // Tracking de ubicación
+  // Tracking
   useEffect(() => {
     pedirPermisoUbicacion().then(ok => {
       setPermiso(ok)
@@ -45,37 +48,47 @@ export function useGeofencing(encuestadorId: string, organizacionId: string) {
     return () => { if (intervalRef.current) clearInterval(intervalRef.current) }
   }, [])
 
-  // Re-evaluar zona cada vez que cambia ubicación o zonas
+  // Re-evaluar cuando cambia ubicacion o zonas
   useEffect(() => {
     if (!ubicacion) return
-    evaluarZona(ubicacion)
-  }, [ubicacion?.lat, ubicacion?.lng, zonas.length])
+    evaluarZona(ubicacion, zonas)
+  }, [ubicacion?.lat, ubicacion?.lng, zonas])
 
-  function evaluarZona(pos: { lat: number; lng: number }) {
-    if (zonas.length === 0) {
-      // Sin zonas asignadas → no bloqueado (encuestador sin restricción geográfica)
+  function evaluarZona(pos: { lat: number; lng: number }, zonasActuales: ZonaActiva[]) {
+    // Si todavia no cargaron las zonas, no bloqueamos ni liberamos
+    if (zonasActuales.length === 0) {
+      // Puede ser que no tenga zonas o que no hayan cargado aun.
+      // Dejamos bloqueado en false para no impedir el uso mientras carga.
       setBloqueado(false)
       setZonaActual(null)
       return
     }
 
-    // Buscar en qué zona está
-    const zona = zonas.find(z => {
-      if (!z.geofencing_activo) return true  // zona sin geofencing → siempre dentro
-      const features = z.zona_geojson?.features
+    const zona = zonasActuales.find(z => {
+      // Si la zona no tiene geofencing activo, siempre esta dentro
+      if (!z.geofencing_activo) return true
+
+      // area_geojson es un FeatureCollection con features tipo 'zona', 'manzana'
+      const features = z.area_geojson?.features
       if (!features) return true
+
       const zonaFeat = features.find((f: any) => f.properties?.tipo === 'zona')
       if (!zonaFeat) return true
+
       const coords = zonaFeat.geometry?.coordinates?.[0]
-      if (!coords) return true
-      return puntoEnPoligono(pos.lng, pos.lat, coords)
+      if (!coords || coords.length < 3) return true
+
+      const dentro = puntoEnPoligono(pos.lng, pos.lat, coords)
+      console.log('[geofencing]', z.encuesta_nombre, '-> dentro:', dentro, 'pos:', pos.lat, pos.lng)
+      return dentro
     })
 
     if (zona) {
       setBloqueado(false)
       setZonaActual(zona)
     } else {
-      setBloqueado(true)  // fuera de todas las zonas → bloqueado
+      console.log('[geofencing] BLOQUEADO - fuera de todas las zonas')
+      setBloqueado(true)
       setZonaActual(null)
     }
   }
@@ -89,6 +102,8 @@ export function useGeofencing(encuestadorId: string, organizacionId: string) {
       const pos = await getUbicacionActual()
       setUbicacion(pos)
       if (encuestadorId && organizacionId) actualizarUbicacion(encuestadorId, organizacionId)
+      // Re-evaluar con las zonas actuales del ref (no del estado del closure)
+      evaluarZona(pos, zonasRef.current)
     }, 30000)
   }
 
