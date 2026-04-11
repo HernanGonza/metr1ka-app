@@ -6,16 +6,28 @@ export async function pedirPermisoUbicacion(): Promise<boolean> {
   return status === 'granted'
 }
 
-export async function getUbicacionActual() {
-  const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High })
-  return { lat: loc.coords.latitude, lng: loc.coords.longitude }
+export async function getUbicacionActual(): Promise<{ lat: number; lng: number } | null> {
+  try {
+    const loc = await Location.getCurrentPositionAsync({
+      accuracy: Location.Accuracy.Balanced,
+      timeInterval: 5000,
+    })
+    return { lat: loc.coords.latitude, lng: loc.coords.longitude }
+  } catch {
+    // GPS no disponible (emulador, servicios desactivados)
+    try {
+      const loc = await Location.getLastKnownPositionAsync()
+      if (loc) return { lat: loc.coords.latitude, lng: loc.coords.longitude }
+    } catch {}
+    return null
+  }
 }
 
-// Ray casting — mismo algoritmo que en web
+// Ray casting — punto en polígono GeoJSON [lng, lat]
 export function puntoEnPoligono(lng: number, lat: number, ring: number[][]): boolean {
   let inside = false
   for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    const [xi, yi] = ring[i]   // xi = lng, yi = lat (formato GeoJSON)
+    const [xi, yi] = ring[i]
     const [xj, yj] = ring[j]
     if (((yi > lat) !== (yj > lat)) && (lng < (xj - xi) * (lat - yi) / (yj - yi) + xi)) {
       inside = !inside
@@ -30,18 +42,19 @@ export function encuestadorEnZona(lat: number, lng: number, areaGeoJSON: any): b
   if (!zonaFeat) return true
   const coords = zonaFeat.geometry?.coordinates?.[0]
   if (!coords) return true
-  // GeoJSON usa [lng, lat], nosotros usamos lat/lng
   return puntoEnPoligono(lng, lat, coords)
 }
 
 export async function actualizarUbicacion(encuestadorId: string, organizacionId: string) {
   try {
-    const { lat, lng } = await getUbicacionActual()
+    const pos = await getUbicacionActual()
+    if (!pos) return  // sin GPS, no actualizar
     await supabase.from('ubicaciones_encuestadores').upsert({
-      encuestador_id: encuestadorId,
+      encuestador_id:  encuestadorId,
       organizacion_id: organizacionId,
-      lat, lng,
-      actualizado_en: new Date().toISOString(),
+      lat:             pos.lat,
+      lng:             pos.lng,
+      actualizado_en:  new Date().toISOString(),
     })
   } catch {}
 }

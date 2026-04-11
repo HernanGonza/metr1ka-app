@@ -7,7 +7,7 @@
     "orientation": "portrait",
     "icon": "./assets/isotipo-transparente.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": false,
+    "newArchEnabled": true,
     "splash": {
       "image": "./assets/isotipo-transparente.png",
       "resizeMode": "contain",

@@ -95,14 +95,14 @@ export function useGeofencing(encuestadorId: string, organizacionId: string) {
 
   async function iniciarTracking() {
     const pos = await getUbicacionActual()
-    setUbicacion(pos)
+    if (pos) setUbicacion(pos)
     if (encuestadorId && organizacionId) actualizarUbicacion(encuestadorId, organizacionId)
 
     intervalRef.current = setInterval(async () => {
       const pos = await getUbicacionActual()
+      if (!pos) return  // GPS no disponible, ignorar este tick
       setUbicacion(pos)
       if (encuestadorId && organizacionId) actualizarUbicacion(encuestadorId, organizacionId)
-      // Re-evaluar con las zonas actuales del ref (no del estado del closure)
       evaluarZona(pos, zonasRef.current)
     }, 30000)
   }

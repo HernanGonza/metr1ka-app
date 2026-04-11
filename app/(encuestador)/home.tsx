@@ -1,4 +1,4 @@
-import { View, Text, FlatList, StyleSheet, Alert, ActivityIndicator } from 'react-native'
+import { View, Text, FlatList, StyleSheet, Alert, ActivityIndicator, TouchableOpacity } from 'react-native'
 import { useRouter } from 'expo-router'
 import { useAuth } from '../../lib/auth'
 import { useEncuestasEncuestador } from '../../hooks/useEncuestas'
@@ -6,7 +6,7 @@ import { useGeofencing } from '../../hooks/useGeofencing'
 import { EncuestaCard } from '../../components/UI/EncuestaCard'
 
 export default function Home() {
-  const { perfil, loading: authLoading } = useAuth()
+  const { perfil, loading: authLoading, signOut } = useAuth()
   const router = useRouter()
 
   const { ubicacion, zonaActual } = useGeofencing(
@@ -44,13 +44,23 @@ export default function Home() {
 
   return (
     <View style={s.container}>
-      <Text style={s.title}>Mis encuestas</Text>
-      {perfil && (
-        <Text style={s.subtitulo}>Hola, {perfil.nombre_completo?.split(' ')[0]}</Text>
-      )}
+      {/* Header con logout */}
+      <View style={s.header}>
+        <View>
+          <Text style={s.title}>Mis encuestas</Text>
+          {perfil && (
+            <Text style={s.subtitulo}>Hola, {perfil.nombre_completo?.split(' ')[0]}</Text>
+          )}
+        </View>
+        <TouchableOpacity style={s.salirBtn} onPress={signOut}>
+          <Text style={s.salirText}>Salir</Text>
+        </TouchableOpacity>
+      </View>
+
       {zonaActual && (
-        <Text style={s.zonaLabel}>📍 En zona: {zonaActual.zona_nombre}</Text>
+        <Text style={s.zonaLabel}>📍 En zona: {zonaActual.encuesta_nombre}</Text>
       )}
+
       <FlatList
         data={encuestas}
         keyExtractor={e => e.asignacion_id}
@@ -71,8 +81,11 @@ export default function Home() {
 const s = StyleSheet.create({
   container:  { flex: 1, backgroundColor: '#f2f1ee' },
   centered:   { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f2f1ee' },
-  title:      { fontSize: 24, fontWeight: '800', color: '#111', padding: 24, paddingTop: 56 },
-  subtitulo:  { fontSize: 14, color: '#888', paddingHorizontal: 24, marginTop: -16, marginBottom: 4 },
-  zonaLabel:  { fontSize: 12, color: '#1a472a', fontWeight: '600', paddingHorizontal: 24, marginBottom: 8 },
+  header:     { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', paddingHorizontal: 24, paddingTop: 56, paddingBottom: 8 },
+  title:      { fontSize: 24, fontWeight: '800', color: '#111' },
+  subtitulo:  { fontSize: 13, color: '#888', marginTop: 2 },
+  salirBtn:   { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1.5, borderColor: '#e5e7eb', backgroundColor: '#fff' },
+  salirText:  { fontSize: 12, color: '#888', fontWeight: '600' },
+  zonaLabel:  { fontSize: 12, color: '#1a472a', fontWeight: '600', paddingHorizontal: 24, marginBottom: 4 },
   empty:      { textAlign: 'center', color: '#888', marginTop: 40, fontSize: 15 },
 })
