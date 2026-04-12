@@ -76,7 +76,14 @@ function MapaNavegacion({
     <View style={{ flex: 1, backgroundColor: '#f2f1ee' }}>
       {/* Header */}
       <View style={mn.header}>
-        <Text style={mn.headerLabel}>Dirigite a esta dirección</Text>
+        <View style={mn.headerTop}>
+          <TouchableOpacity onPress={() => router.back()} style={mn.backBtn}>
+            <Text style={mn.backBtnText}>← Salir</Text>
+          </TouchableOpacity>
+          <Text style={mn.statsText}>{stats.completadas}/{stats.total_parcelas} encuestas</Text>
+        </View>
+        <Text style={mn.headerLabel}>Próxima parada</Text>
+        <Text style={mn.headerDir}>Dirigite a esta dirección</Text>
         <Text style={mn.headerDir}>{parcela?.direccion || 'Parcela sin dirección'}</Text>
         <View style={mn.statsRow}>
           <Text style={mn.statsText}>{stats.completadas} / {stats.total_parcelas} encuestas</Text>
@@ -162,7 +169,10 @@ function MapaNavegacion({
 }
 
 const mn = StyleSheet.create({
-  header:       { backgroundColor: '#1a472a', padding: 20, paddingTop: 52 },
+  header:       { backgroundColor: '#1a472a', padding: 20, paddingTop: 52, paddingBottom: 14 },
+  headerTop:    { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  backBtn:      { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 4, paddingHorizontal: 8, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.15)' },
+  backBtnText:  { color: '#fff', fontSize: 13, fontWeight: '700' },
   headerLabel:  { fontSize: 11, fontWeight: '700', color: '#a7f3d0', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 },
   headerDir:    { fontSize: 20, fontWeight: '800', color: '#fff', marginBottom: 12 },
   statsRow:     { flexDirection: 'row', alignItems: 'center', gap: 8 },
@@ -294,6 +304,7 @@ type Pantalla = 'mapa' | 'inicio' | 'participa' | 'encuesta' | 'no_responde' | '
 export default function EncuestaScreen() {
   const { id, asignacion, zona } = useLocalSearchParams<{ id: string; asignacion: string; zona: string }>()
   const { perfil }   = useAuth()
+  const insets            = useSafeAreaInsets()
   const router       = useRouter()
   const { ubicacion } = useGeofencing(perfil?.id || '', perfil?.organizacion_id || '')
 
@@ -499,8 +510,6 @@ export default function EncuestaScreen() {
       </View>
     )
 
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    const insets = useSafeAreaInsets()
     return (
       <View style={{ flex: 1 }}>
         <MapaNavegacion
