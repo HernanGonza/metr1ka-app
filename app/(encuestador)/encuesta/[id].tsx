@@ -5,7 +5,7 @@ import {
 } from 'react-native'
 import MapView, { Marker, Circle } from 'react-native-maps'
 import Slider from '@react-native-community/slider'
-import { useLocalSearchParams, useRouter } from 'expo-router'
+import { router, useLocalSearchParams, useRouter } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { supabase } from '../../../lib/supabase'
 import { useAuth } from '../../../lib/auth'
@@ -140,7 +140,7 @@ function MapaNavegacion({
         {/* Badge de llegada */}
         {enParcela && (
           <View style={mn.llegadaBadge}>
-            <Text style={mn.llegadaText}>✅ Estás frente a la parcela</Text>
+            <Text style={mn.llegadaText}>✅ Estás frente a la casa</Text>
             <Text style={mn.llegadaSub}>Tocá la puerta y presioná "Comenzar"</Text>
           </View>
         )}
@@ -187,7 +187,7 @@ const mn = StyleSheet.create({
   distText:     { color: '#fff', fontWeight: '700', fontSize: 14 },
   footer:       { flexDirection: 'row', gap: 10, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 0, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#e5e7eb' },
   btnContingencia: { flex: 1, backgroundColor: '#f9fafb', borderRadius: 12, padding: 14, alignItems: 'center', borderWidth: 1.5, borderColor: '#e5e7eb' },
-  btnContText:  { fontSize: 13, fontWeight: '600', color: '#374151' },
+  btnContText:  { fontSize: 13, fontWeight: '600', color: '#374151', textAlign: 'center', letterSpacing: 0.5 },
 })
 
 // ── PreguntaCard ──────────────────────────────────────────────────
@@ -503,7 +503,7 @@ export default function EncuestaScreen() {
       <View style={s.centered}>
         <Text style={{ fontSize: 48, marginBottom: 16 }}>🎉</Text>
         <Text style={[s.finTitle, { marginBottom: 12 }]}>¡Zona completada!</Text>
-        <Text style={s.finDesc}>No quedan más parcelas para visitar en esta zona.</Text>
+        <Text style={s.finDesc}>No quedan más casas para visitar en esta zona.</Text>
         <TouchableOpacity style={s.btnComenzar} onPress={() => router.back()}>
           <Text style={s.btnComenzarText}>← Volver al inicio</Text>
         </TouchableOpacity>
@@ -623,7 +623,7 @@ export default function EncuestaScreen() {
           : 'Las respuestas fueron enviadas al panel central.'}
       </Text>
       <TouchableOpacity style={s.btnComenzar} onPress={continuarSiguiente}>
-        <Text style={s.btnComenzarText}>Siguiente parcela →</Text>
+        <Text style={s.btnComenzarText}>Siguiente casa →</Text>
       </TouchableOpacity>
     </View>
   )
