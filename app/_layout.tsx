@@ -14,16 +14,16 @@ function SplashScreen({ onFinish }: { onFinish: () => void }) {
     Animated.sequence([
       // Fade + scale in
       Animated.parallel([
-        Animated.timing(opacity, { toValue: 1, duration: 500, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 1, duration: 700, useNativeDriver: true }),
         Animated.spring(scale, { toValue: 1, tension: 80, friction: 8, useNativeDriver: true }),
       ]),
       // Mostrar barra de progreso
-      Animated.timing(progress, { toValue: 1, duration: 900, useNativeDriver: false }),
+      Animated.timing(progress, { toValue: 1, duration: 1600, useNativeDriver: false }),
       // Pausa
-      Animated.delay(200),
+      Animated.delay(700),
     ]).start(() => {
       // Fade out
-      Animated.timing(opacity, { toValue: 0, duration: 300, useNativeDriver: true }).start(onFinish)
+      Animated.timing(opacity, { toValue: 0, duration: 450, useNativeDriver: true }).start(onFinish)
     })
   }, [])
 
