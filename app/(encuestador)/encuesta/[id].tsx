@@ -55,6 +55,7 @@ function MapaNavegacion({
   stats,
   onNoHayNadie,
   onNoParcela,
+  insets = { bottom: 0, top: 0, left: 0, right: 0 },
 }: {
   parcela: any
   ubicacion: { lat: number; lng: number } | null
@@ -62,6 +63,7 @@ function MapaNavegacion({
   stats: { total_parcelas: number; completadas: number }
   onNoHayNadie: () => void
   onNoParcela: () => void
+  insets?: { bottom: number; top: number; left: number; right: number }
 }) {
   const destLat = parcela?.punto_centroide?.lat
   const destLng = parcela?.punto_centroide?.lng
@@ -146,7 +148,7 @@ function MapaNavegacion({
       </View>
 
       {/* Botones de contingencia */}
-      <View style={mn.footer}>
+      <View style={[mn.footer, { paddingBottom: Math.max(insets.bottom + 12, 16) }]}>
         <TouchableOpacity style={mn.btnContingencia} onPress={onNoHayNadie}>
           <Text style={mn.btnContText}>🚪 No hay nadie</Text>
         </TouchableOpacity>
@@ -172,7 +174,7 @@ const mn = StyleSheet.create({
   llegadaSub:   { fontSize: 13, color: '#666' },
   distBadge:    { position: 'absolute', top: 16, alignSelf: 'center', backgroundColor: 'rgba(0,0,0,.65)', borderRadius: 100, paddingHorizontal: 16, paddingVertical: 8 },
   distText:     { color: '#fff', fontWeight: '700', fontSize: 14 },
-  footer:       { flexDirection: 'row', gap: 10, padding: 16, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#e5e7eb' },
+  footer:       { flexDirection: 'row', gap: 10, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 0, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#e5e7eb' },
   btnContingencia: { flex: 1, backgroundColor: '#f9fafb', borderRadius: 12, padding: 14, alignItems: 'center', borderWidth: 1.5, borderColor: '#e5e7eb' },
   btnContText:  { fontSize: 13, fontWeight: '600', color: '#374151' },
 })
@@ -496,6 +498,8 @@ export default function EncuestaScreen() {
       </View>
     )
 
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    const insets = useSafeAreaInsets()
     return (
       <View style={{ flex: 1 }}>
         <MapaNavegacion
@@ -505,11 +509,12 @@ export default function EncuestaScreen() {
           stats={{ total_parcelas: parcela.total_parcelas, completadas: parcela.completadas }}
           onNoHayNadie={() => registrarNoVisita('no_hay_nadie')}
           onNoParcela={() => registrarNoVisita('no_es_vivienda')}
+          insets={insets}
         />
         {/* Botón comenzar — solo visible cuando está frente a la parcela */}
         {enParcela && (
           <TouchableOpacity
-            style={s.btnFlotante}
+            style={[s.btnFlotante, { bottom: insets.bottom + 116 }]}
             onPress={() => preguntaParticipa ? setPantalla('participa') : setPantalla('encuesta')}
           >
             <Text style={s.btnFlotanteText}>Comenzar encuesta →</Text>
