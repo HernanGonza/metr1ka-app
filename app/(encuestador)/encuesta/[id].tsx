@@ -6,6 +6,7 @@ import {
 import MapView, { Marker, Circle } from 'react-native-maps'
 import Slider from '@react-native-community/slider'
 import { useLocalSearchParams, useRouter } from 'expo-router'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { supabase } from '../../../lib/supabase'
 import { useAuth } from '../../../lib/auth'
 import { useGeofencing } from '../../../hooks/useGeofencing'

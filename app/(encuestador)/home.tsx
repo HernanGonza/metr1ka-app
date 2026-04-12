@@ -126,8 +126,4 @@ const s = StyleSheet.create({
   emptyIcon:  { fontSize: 48, marginBottom: 4 },
   emptyTitle: { fontSize: 18, fontWeight: '800', color: '#1a1a1a', textAlign: 'center' },
   emptyText:  { fontSize: 14, color: '#6b7280', textAlign: 'center', lineHeight: 21 },
-<<<<<<< Updated upstream
 })
-=======
-})
->>>>>>> Stashed changes

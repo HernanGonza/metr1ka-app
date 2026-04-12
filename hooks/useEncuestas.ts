@@ -80,10 +80,21 @@ export function useEncuestasEncuestador(
       return
     }
 
-    const lista = (data || []).map((enc: any) => ({
+    const todas = (data || []).map((enc: any) => ({
       ...enc,
       enZona: calcularEnZona(enc, ubicacion, zonaActual),
     }))
+
+    // Deduplicar por encuesta.id: si una misma encuesta tiene varias zonas,
+    // mostrar solo la que está activa (enZona=true), o la primera si ninguna lo está
+    const seen = new Map<string, any>()
+    for (const enc of todas) {
+      const prev = seen.get(enc.id)
+      if (!prev || enc.enZona === true) {
+        seen.set(enc.id, enc)
+      }
+    }
+    const lista = Array.from(seen.values())
 
     encuestasIdsRef.current = lista.map((e: any) => e.id)
     setEncuestas(lista)
