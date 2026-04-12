@@ -3,7 +3,10 @@ import {
   View, Text, ScrollView, StyleSheet, RefreshControl,
   TouchableOpacity, ActivityIndicator,
 } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useAuth } from '../../lib/auth'
+import { AppHeader } from '../../components/UI/AppHeader'
+import { LogoSvg } from '../../components/UI/LogoSvg'
 import { supabase } from '../../lib/supabase'
 
 // ── Mini progress bar ─────────────────────────────────────────
@@ -81,6 +84,7 @@ function CardZona({ zona }: { zona: any }) {
 // ── Dashboard ─────────────────────────────────────────────────
 export default function CoordinadorDashboard() {
   const { perfil, signOut } = useAuth()
+  const insets = useSafeAreaInsets()
   const [data,      setData]      = useState<any>(null)
   const [loading,   setLoading]   = useState(true)
   const [refresh,   setRefresh]   = useState(false)
@@ -128,16 +132,7 @@ export default function CoordinadorDashboard() {
       style={cd.container}
       refreshControl={<RefreshControl refreshing={refresh} onRefresh={() => { setRefresh(true); fetchData() }} tintColor="#1a472a" />}
     >
-      {/* Header */}
-      <View style={cd.header}>
-        <View>
-          <Text style={cd.greeting}>Hola, {perfil?.nombre_completo?.split(' ')[0]} 👋</Text>
-          <Text style={cd.sub}>{data?.equipo_nombre || 'Mi equipo'} · Coordinador</Text>
-        </View>
-        <TouchableOpacity onPress={signOut} style={cd.salirBtn}>
-          <Text style={cd.salirText}>Salir</Text>
-        </TouchableOpacity>
-      </View>
+      <AppHeader nombre={perfil?.nombre_completo} rol="coordinador" subtitulo={data?.equipo_nombre} onSignOut={signOut} color="#0369a1" />
 
       {/* KPIs */}
       <View style={cd.kpiRow}>
@@ -185,11 +180,11 @@ export default function CoordinadorDashboard() {
 
 const cd = StyleSheet.create({
   container:     { flex: 1, backgroundColor: '#f2f1ee' },
-  header:        { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 24, paddingTop: 56 },
-  greeting:      { fontSize: 22, fontWeight: '800', color: '#111' },
-  sub:           { fontSize: 12, color: '#888', marginTop: 2 },
-  salirBtn:      { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1.5, borderColor: '#e5e7eb' },
-  salirText:     { fontSize: 12, color: '#888', fontWeight: '600' },
+  header:   { backgroundColor: '#0369a1', padding: 20, paddingBottom: 20 },
+  greeting: { fontSize: 18, fontWeight: '800', color: '#fff', letterSpacing: -0.3, marginBottom: 4 },
+  sub:      { fontSize: 12, color: 'rgba(255,255,255,0.6)', fontWeight: '500' },
+  salirBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)', backgroundColor: 'rgba(255,255,255,0.1)' },
+  salirText: { fontSize: 12, color: 'rgba(255,255,255,0.8)', fontWeight: '600' },
   kpiRow:        { flexDirection: 'row', paddingHorizontal: 16, gap: 8, marginBottom: 20 },
   kpi:           { flex: 1, borderRadius: 12, padding: 12 },
   kpiVal:        { fontSize: 26, fontWeight: '800', letterSpacing: -0.5 },

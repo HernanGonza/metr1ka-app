@@ -3,7 +3,10 @@ import {
   View, Text, ScrollView, StyleSheet, RefreshControl,
   TouchableOpacity, ActivityIndicator, Modal, FlatList,
 } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useAuth } from '../../lib/auth'
+import { AppHeader } from '../../components/UI/AppHeader'
+import { LogoSvg } from '../../components/UI/LogoSvg'
 import { supabase } from '../../lib/supabase'
 
 // ── Componentes de gráficos ───────────────────────────────────
@@ -188,6 +191,7 @@ function Selector({ label, value, opciones, onSelect, placeholder }: {
 // ── Dashboard Admin/Gestor ────────────────────────────────────
 export default function AdminDashboard() {
   const { perfil, signOut } = useAuth()
+  const insets = useSafeAreaInsets()
 
   // Catálogos
   const [encuestas,     setEncuestas]     = useState<any[]>([])
@@ -341,19 +345,12 @@ export default function AdminDashboard() {
       style={s.container}
       refreshControl={<RefreshControl refreshing={refresh} onRefresh={() => { setRefresh(true); fetchCatalogos() }} tintColor="#1a472a" />}
     >
-      {/* Header */}
-      <View style={s.header}>
-        <View>
-          <Text style={s.greeting}>Hola, {perfil?.nombre_completo?.split(' ')[0]} 👋</Text>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: '#22c55e' }} />
-            <Text style={s.orgLabel}>Panel {perfil?.rol === 'gestor' ? 'Gestor' : 'Admin'} · En vivo</Text>
-          </View>
-        </View>
-        <TouchableOpacity onPress={signOut} style={s.salirBtn}>
-          <Text style={s.salirText}>Salir</Text>
-        </TouchableOpacity>
-      </View>
+      <AppHeader
+        nombre={perfil?.nombre_completo}
+        rol={perfil?.rol}
+        onSignOut={signOut}
+        color="#1a472a"
+      />
 
       {/* Selector de encuesta */}
       {encuestas.length > 1 && (
@@ -447,18 +444,21 @@ export default function AdminDashboard() {
         </>
       )}
 
-      <View style={{ height: 40 }} />
+      <View style={{ height: insets.bottom + 32 }} />
     </ScrollView>
   )
 }
 
 const s = StyleSheet.create({
   container:        { flex: 1, backgroundColor: '#f2f1ee' },
-  header:           { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 24, paddingTop: 56 },
-  greeting:         { fontSize: 22, fontWeight: '800', color: '#111' },
-  orgLabel:         { fontSize: 12, color: '#888' },
-  salirBtn:         { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1.5, borderColor: '#e5e7eb' },
-  salirText:        { fontSize: 12, color: '#888', fontWeight: '600' },
+  header:     { backgroundColor: '#1a472a', padding: 20, paddingBottom: 20 },
+  headerTop:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  greeting:   { fontSize: 18, fontWeight: '800', color: '#fff', letterSpacing: -0.3, marginBottom: 4 },
+  headerLive: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  liveDot:    { width: 7, height: 7, borderRadius: 4, backgroundColor: '#4ade80' },
+  orgLabel:   { fontSize: 12, color: 'rgba(255,255,255,0.6)', fontWeight: '500' },
+  salirBtn:   { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)', backgroundColor: 'rgba(255,255,255,0.1)' },
+  salirText:  { fontSize: 12, color: 'rgba(255,255,255,0.8)', fontWeight: '600' },
   chip:             { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 100, borderWidth: 1.5, borderColor: '#e5e7eb', backgroundColor: '#fff', maxWidth: 180 },
   chipActive:       { borderColor: '#1a472a', backgroundColor: '#d8f3dc' },
   chipText:         { fontSize: 12, fontWeight: '600', color: '#888' },

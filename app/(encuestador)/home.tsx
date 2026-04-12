@@ -2,6 +2,7 @@ import { View, Text, FlatList, StyleSheet, Alert, ActivityIndicator, TouchableOp
 import { useRouter } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useAuth } from '../../lib/auth'
+import { AppHeader } from '../../components/UI/AppHeader'
 import { useEncuestasEncuestador } from '../../hooks/useEncuestas'
 import { useGeofencing } from '../../hooks/useGeofencing'
 import { EncuestaCard } from '../../components/UI/EncuestaCard'
@@ -23,6 +24,15 @@ export default function Home() {
   )
 
   function handlePress(enc: any) {
+    // Verificar fecha de desbloqueo
+    const hoy = new Date().toISOString().slice(0, 10)
+    if (enc.fecha_inicio && enc.fecha_inicio > hoy) {
+      const fecha = new Date(enc.fecha_inicio + 'T12:00:00')
+        .toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })
+      Alert.alert('📅 Todavía no disponible', `Esta encuesta se habilita el ${fecha}.`,
+        [{ text: 'Entendido', style: 'cancel' }])
+      return
+    }
     if (enc.enZona === null) {
       Alert.alert('📍 Obteniendo ubicación', 'Esperá un momento mientras obtenemos tu posición.')
       return
@@ -51,32 +61,13 @@ export default function Home() {
   return (
     <View style={s.container}>
       <StatusBar barStyle="light-content" backgroundColor="#1a472a" />
-
-      {/* Header */}
-      <View style={[s.header, { paddingTop: insets.top + 20 }]}>
-        <View style={s.headerTop}>
-          <View>
-            <Text style={s.saludo}>{saludo} 👋</Text>
-            <Text style={s.nombre}>{nombre}</Text>
-          </View>
-          <TouchableOpacity style={s.salirBtn} onPress={signOut}>
-            <Text style={s.salirText}>Salir</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Zona activa */}
-        {zonaActual ? (
-          <View style={s.zonaBadge}>
-            <View style={s.zonaDot} />
-            <Text style={s.zonaText}>En zona: {zonaActual.encuesta_nombre}</Text>
-          </View>
-        ) : (
-          <View style={[s.zonaBadge, { backgroundColor: 'rgba(255,255,255,0.08)' }]}>
-            <View style={[s.zonaDot, { backgroundColor: '#f59e0b' }]} />
-            <Text style={[s.zonaText, { color: 'rgba(255,255,255,0.5)' }]}>Buscando zona...</Text>
-          </View>
-        )}
-      </View>
+      <AppHeader
+        nombre={perfil?.nombre_completo}
+        rol="encuestador"
+        subtitulo={zonaActual ? `En zona: ${zonaActual.encuesta_nombre}` : 'Buscando zona...'}
+        onSignOut={signOut}
+        color="#1a472a"
+      />
 
       {/* Lista de encuestas */}
       <FlatList
