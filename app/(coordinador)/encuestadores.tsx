@@ -173,8 +173,8 @@ export default function MiEquipo() {
     const ubic = ubicaciones[encId]
     if (ubic && mapRef.current) {
       mapRef.current.animateToRegion({
-        latitude: ubic.latitud,
-        longitude: ubic.longitud,
+        latitude: ubic.lat,
+        longitude: ubic.lng,
         latitudeDelta: 0.005,
         longitudeDelta: 0.005,
       }, 600)
@@ -270,7 +270,7 @@ export default function MiEquipo() {
             {/* Marcadores de encuestadores con ubicación */}
             {encuestadores.map((enc, i) => {
               const ubic = ubicaciones[enc.id]
-              if (!ubic?.latitud) return null
+              if (!ubic?.lat) return null
               const mins   = calcMinutos(ubic.actualizado_en)
               const activo = mins !== null && mins < 5
               const color  = COLORES[i % COLORES.length]
@@ -278,7 +278,7 @@ export default function MiEquipo() {
               return (
                 <Marker
                   key={enc.id}
-                  coordinate={{ latitude: ubic.latitud, longitude: ubic.longitud }}
+                  coordinate={{ latitude: ubic.lat, longitude: ubic.lng }}
                   onPress={() => focusEncuestador(enc.id)}
                 >
                   <View style={[st.markerWrap, isFocus && st.markerFocus]}>

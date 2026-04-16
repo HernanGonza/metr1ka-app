@@ -57,9 +57,9 @@ export function useGeofencing(encuestadorId: string, organizacionId: string) {
   function evaluarZona(pos: { lat: number; lng: number }, zonasActuales: ZonaActiva[]) {
     // Si todavia no cargaron las zonas, no bloqueamos ni liberamos
     if (zonasActuales.length === 0) {
-      // Puede ser que no tenga zonas o que no hayan cargado aun.
-      // Dejamos bloqueado en false para no impedir el uso mientras carga.
-      setBloqueado(false)
+      // Zonas aún no cargadas — mantener estado null (calculando)
+      // para no bloquear ni desbloquear hasta tener datos reales.
+      // setBloqueado(null) es el estado inicial, no hacer nada aquí.
       setZonaActual(null)
       return
     }

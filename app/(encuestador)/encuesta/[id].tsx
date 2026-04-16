@@ -5,7 +5,7 @@ import {
 } from 'react-native'
 import MapView, { Marker, Circle } from 'react-native-maps'
 import Slider from '@react-native-community/slider'
-import { router, useLocalSearchParams, useRouter } from 'expo-router'
+import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { supabase } from '../../../lib/supabase'
 import { useAuth } from '../../../lib/auth'
@@ -13,7 +13,7 @@ import { useGeofencing } from '../../../hooks/useGeofencing'
 
 // ── Utilidades ───────────────────────────────────────────────────
 const { width: SW } = Dimensions.get('window')
-const RADIO_LLEGADA = 99999  // TEST: radio extendido para probar desde casa
+const RADIO_LLEGADA = 30  // 30 metros de radio para considerar que llegó a la parcela
 
 function distanciaMetros(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 6371000
@@ -82,8 +82,7 @@ function MapaNavegacion({
           </TouchableOpacity>
           <Text style={mn.statsText}>{stats.completadas}/{stats.total_parcelas} encuestas</Text>
         </View>
-        <Text style={mn.headerLabel}>Próxima parada</Text>
-        <Text style={mn.headerDir}>Dirigite a esta dirección</Text>
+        <Text style={mn.headerLabel}>Próxima parada — dirigite a esta dirección</Text>
         <Text style={mn.headerDir}>{parcela?.direccion || 'Parcela sin dirección'}</Text>
         <View style={mn.statsRow}>
           <Text style={mn.statsText}>{stats.completadas} / {stats.total_parcelas} encuestas</Text>
@@ -140,7 +139,7 @@ function MapaNavegacion({
         {/* Badge de llegada */}
         {enParcela && (
           <View style={mn.llegadaBadge}>
-            <Text style={mn.llegadaText}>✅ Estás frente a la casa</Text>
+            <Text style={mn.llegadaText}>✅ Estás frente a la parcela</Text>
             <Text style={mn.llegadaSub}>Tocá la puerta y presioná "Comenzar"</Text>
           </View>
         )}
@@ -187,7 +186,7 @@ const mn = StyleSheet.create({
   distText:     { color: '#fff', fontWeight: '700', fontSize: 14 },
   footer:       { flexDirection: 'row', gap: 10, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 0, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#e5e7eb' },
   btnContingencia: { flex: 1, backgroundColor: '#f9fafb', borderRadius: 12, padding: 14, alignItems: 'center', borderWidth: 1.5, borderColor: '#e5e7eb' },
-  btnContText:  { fontSize: 13, fontWeight: '600', color: '#374151', textAlign: 'center', letterSpacing: 0.5 },
+  btnContText:  { fontSize: 13, fontWeight: '600', color: '#374151' },
 })
 
 // ── PreguntaCard ──────────────────────────────────────────────────
@@ -371,7 +370,7 @@ export default function EncuestaScreen() {
   const enParcela = useMemo(() => {
     // TEST: siempre true para pruebas sin GPS
     if (!parcela?.punto_centroide) return true  // sin parcela cargada, mostrar botón igual
-    if (!ubicacion) return true  // sin GPS, mostrar botón igual
+    if (!ubicacion) return false  // Sin GPS = no puede encuestar  // sin GPS, mostrar botón igual
     const d = distanciaMetros(
       ubicacion.lat, ubicacion.lng,
       parcela.punto_centroide.lat, parcela.punto_centroide.lng
@@ -503,7 +502,7 @@ export default function EncuestaScreen() {
       <View style={s.centered}>
         <Text style={{ fontSize: 48, marginBottom: 16 }}>🎉</Text>
         <Text style={[s.finTitle, { marginBottom: 12 }]}>¡Zona completada!</Text>
-        <Text style={s.finDesc}>No quedan más casas para visitar en esta zona.</Text>
+        <Text style={s.finDesc}>No quedan más parcelas para visitar en esta zona.</Text>
         <TouchableOpacity style={s.btnComenzar} onPress={() => router.back()}>
           <Text style={s.btnComenzarText}>← Volver al inicio</Text>
         </TouchableOpacity>
@@ -623,7 +622,7 @@ export default function EncuestaScreen() {
           : 'Las respuestas fueron enviadas al panel central.'}
       </Text>
       <TouchableOpacity style={s.btnComenzar} onPress={continuarSiguiente}>
-        <Text style={s.btnComenzarText}>Siguiente casa →</Text>
+        <Text style={s.btnComenzarText}>Siguiente parcela →</Text>
       </TouchableOpacity>
     </View>
   )
