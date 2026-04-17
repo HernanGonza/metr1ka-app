@@ -1,5 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
-import { pedirPermisoUbicacion, getUbicacionActual, actualizarUbicacion } from '../lib/location'
+import {
+  pedirPermisoUbicacion,
+  iniciarTrackingSingleton,
+  setLocationCallback,
+  detenerTrackingSingleton,
+} from '../lib/location'
 import { supabase } from '../lib/supabase'
 import { puntoEnPoligono } from '../lib/location'
 
@@ -7,20 +12,23 @@ export type ZonaActiva = {
   zona_id: string
   encuesta_id: string
   encuesta_nombre: string
-  area_geojson: any        // el campo real que devuelve get_zonas_encuestador
+  area_geojson: any
   geofencing_activo: boolean
   equipo_id: string
 }
+
+// Contador global de instancias activas del hook
+let _instanceCount = 0
 
 export function useGeofencing(encuestadorId: string, organizacionId: string) {
   const [permiso,    setPermiso]    = useState<boolean | null>(null)
   const [ubicacion,  setUbicacion]  = useState<{ lat: number; lng: number } | null>(null)
   const [zonas,      setZonas]      = useState<ZonaActiva[]>([])
   const [zonaActual, setZonaActual] = useState<ZonaActiva | null>(null)
-  const [bloqueado,  setBloqueado]  = useState<boolean | null>(null)  // null = todavia calculando
-  const intervalRef  = useRef<any>(null)
-  const zonasRef     = useRef<ZonaActiva[]>([])  // ref para acceder en el closure del interval
+  const [bloqueado,  setBloqueado]  = useState<boolean | null>(null)
+  const zonasRef = useRef<ZonaActiva[]>([])
 
+  // Cargar zonas cuando hay un ID válido
   useEffect(() => {
     if (!encuestadorId) return
     fetchZonas()
@@ -39,47 +47,69 @@ export function useGeofencing(encuestadorId: string, organizacionId: string) {
     setZonas(lista)
   }
 
-  // Tracking
+  // Tracking singleton — solo cuando hay ID válido
   useEffect(() => {
-    pedirPermisoUbicacion().then(ok => {
-      setPermiso(ok)
-      if (ok) iniciarTracking()
-    })
-    return () => { if (intervalRef.current) clearInterval(intervalRef.current) }
-  }, [])
+    if (!encuestadorId || !organizacionId) return
 
-  // Re-evaluar cuando cambia ubicacion o zonas
+    _instanceCount++
+    console.log('[geofencing] Instancia activa, total:', _instanceCount)
+
+    let mounted = true
+
+    pedirPermisoUbicacion().then(async (ok) => {
+      if (!mounted) return
+      setPermiso(ok)
+      if (!ok) {
+        console.warn('[geofencing] Permiso de ubicación denegado')
+        return
+      }
+
+      // Registrar callback para recibir actualizaciones de posición
+      setLocationCallback((pos) => {
+        if (!mounted) return
+        setUbicacion(pos)
+        evaluarZona(pos, zonasRef.current)
+      })
+
+      // Iniciar el singleton — si ya corre para este encuestador, no hace nada
+      await iniciarTrackingSingleton(encuestadorId, organizacionId)
+    })
+
+    return () => {
+      mounted = false
+      _instanceCount--
+      console.log('[geofencing] Instancia destruida, restantes:', _instanceCount)
+      // Detener tracking solo cuando no queda ninguna instancia
+      if (_instanceCount <= 0) {
+        _instanceCount = 0
+        setLocationCallback(null)
+        detenerTrackingSingleton()
+      }
+    }
+  }, [encuestadorId, organizacionId])
+
+  // Re-evaluar zona cuando cambian las zonas
   useEffect(() => {
     if (!ubicacion) return
     evaluarZona(ubicacion, zonas)
-  }, [ubicacion?.lat, ubicacion?.lng, zonas])
+  }, [zonas])
 
   function evaluarZona(pos: { lat: number; lng: number }, zonasActuales: ZonaActiva[]) {
-    // Si todavia no cargaron las zonas, no bloqueamos ni liberamos
     if (zonasActuales.length === 0) {
-      // Zonas aún no cargadas — mantener estado null (calculando)
-      // para no bloquear ni desbloquear hasta tener datos reales.
-      // setBloqueado(null) es el estado inicial, no hacer nada aquí.
       setZonaActual(null)
       return
     }
 
     const zona = zonasActuales.find(z => {
-      // Si la zona no tiene geofencing activo, siempre esta dentro
       if (!z.geofencing_activo) return true
-
-      // area_geojson es un FeatureCollection con features tipo 'zona', 'manzana'
       const features = z.area_geojson?.features
       if (!features) return true
-
       const zonaFeat = features.find((f: any) => f.properties?.tipo === 'zona')
       if (!zonaFeat) return true
-
       const coords = zonaFeat.geometry?.coordinates?.[0]
       if (!coords || coords.length < 3) return true
-
       const dentro = puntoEnPoligono(pos.lng, pos.lat, coords)
-      console.log('[geofencing]', z.encuesta_nombre, '-> dentro:', dentro, 'pos:', pos.lat, pos.lng)
+      console.log('[geofencing]', z.encuesta_nombre, '-> dentro:', dentro)
       return dentro
     })
 
@@ -87,30 +117,10 @@ export function useGeofencing(encuestadorId: string, organizacionId: string) {
       setBloqueado(false)
       setZonaActual(zona)
     } else {
-      console.log('[geofencing] BLOQUEADO - fuera de todas las zonas')
+      console.log('[geofencing] BLOQUEADO — fuera de todas las zonas')
       setBloqueado(true)
       setZonaActual(null)
     }
-  }
-
-  async function iniciarTracking() {
-    console.log('[geofencing] Iniciando tracking para', encuestadorId)
-    const pos = await getUbicacionActual()
-    if (pos) {
-      console.log('[geofencing] Posición inicial:', pos.lat, pos.lng)
-      setUbicacion(pos)
-    } else {
-      console.warn('[geofencing] No se pudo obtener posición inicial')
-    }
-    if (encuestadorId && organizacionId) actualizarUbicacion(encuestadorId, organizacionId)
-
-    intervalRef.current = setInterval(async () => {
-      const pos = await getUbicacionActual()
-      if (!pos) return  // GPS no disponible, ignorar este tick
-      setUbicacion(pos)
-      if (encuestadorId && organizacionId) actualizarUbicacion(encuestadorId, organizacionId)
-      evaluarZona(pos, zonasRef.current)
-    }, 15000)  // Actualizar cada 15 segundos
   }
 
   return { permiso, ubicacion, bloqueado, zonaActual, zonas, refetchZonas: fetchZonas }

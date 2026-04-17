@@ -56,6 +56,7 @@ function MapaNavegacion({
   stats,
   onNoHayNadie,
   onNoParcela,
+  onSalir,
   insets = { bottom: 0, top: 0, left: 0, right: 0 },
 }: {
   parcela: any
@@ -64,6 +65,7 @@ function MapaNavegacion({
   stats: { total_parcelas: number; completadas: number }
   onNoHayNadie: () => void
   onNoParcela: () => void
+  onSalir: () => void
   insets?: { bottom: number; top: number; left: number; right: number }
 }) {
   const destLat = parcela?.punto_centroide?.lat
@@ -77,7 +79,7 @@ function MapaNavegacion({
       {/* Header */}
       <View style={mn.header}>
         <View style={mn.headerTop}>
-          <TouchableOpacity onPress={() => router.back()} style={mn.backBtn}>
+          <TouchableOpacity onPress={onSalir} style={mn.backBtn}>
             <Text style={mn.backBtnText}>← Salir</Text>
           </TouchableOpacity>
           <Text style={mn.statsText}>{stats.completadas}/{stats.total_parcelas} encuestas</Text>
@@ -518,6 +520,7 @@ export default function EncuestaScreen() {
           stats={{ total_parcelas: parcela.total_parcelas, completadas: parcela.completadas }}
           onNoHayNadie={() => registrarNoVisita('no_hay_nadie')}
           onNoParcela={() => registrarNoVisita('no_es_vivienda')}
+          onSalir={() => router.back()}
           insets={insets}
         />
         {/* Botón comenzar — solo visible cuando está frente a la parcela */}
