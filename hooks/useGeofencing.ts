@@ -94,8 +94,14 @@ export function useGeofencing(encuestadorId: string, organizacionId: string) {
   }
 
   async function iniciarTracking() {
+    console.log('[geofencing] Iniciando tracking para', encuestadorId)
     const pos = await getUbicacionActual()
-    if (pos) setUbicacion(pos)
+    if (pos) {
+      console.log('[geofencing] Posición inicial:', pos.lat, pos.lng)
+      setUbicacion(pos)
+    } else {
+      console.warn('[geofencing] No se pudo obtener posición inicial')
+    }
     if (encuestadorId && organizacionId) actualizarUbicacion(encuestadorId, organizacionId)
 
     intervalRef.current = setInterval(async () => {
@@ -104,7 +110,7 @@ export function useGeofencing(encuestadorId: string, organizacionId: string) {
       setUbicacion(pos)
       if (encuestadorId && organizacionId) actualizarUbicacion(encuestadorId, organizacionId)
       evaluarZona(pos, zonasRef.current)
-    }, 30000)
+    }, 15000)  // Actualizar cada 15 segundos
   }
 
   return { permiso, ubicacion, bloqueado, zonaActual, zonas, refetchZonas: fetchZonas }

@@ -48,13 +48,26 @@ export function encuestadorEnZona(lat: number, lng: number, areaGeoJSON: any): b
 export async function actualizarUbicacion(encuestadorId: string, organizacionId: string) {
   try {
     const pos = await getUbicacionActual()
-    if (!pos) return  // sin GPS, no actualizar
-    await supabase.from('ubicaciones_encuestadores').upsert({
-      encuestador_id:  encuestadorId,
-      organizacion_id: organizacionId,
-      lat:             pos.lat,
-      lng:             pos.lng,
-      actualizado_en:  new Date().toISOString(),
-    })
-  } catch {}
+    if (!pos) {
+      console.warn('[location] Sin GPS — no se actualiza ubicación')
+      return
+    }
+    const { error } = await supabase.from('ubicaciones_encuestadores').upsert(
+      {
+        encuestador_id:  encuestadorId,
+        organizacion_id: organizacionId,
+        lat:             pos.lat,
+        lng:             pos.lng,
+        actualizado_en:  new Date().toISOString(),
+      },
+      { onConflict: 'encuestador_id' }
+    )
+    if (error) {
+      console.error('[location] Error al actualizar ubicación:', error.message, error.code)
+    } else {
+      console.log('[location] Ubicación actualizada:', pos.lat, pos.lng)
+    }
+  } catch (e) {
+    console.error('[location] Exception en actualizarUbicacion:', e)
+  }
 }
