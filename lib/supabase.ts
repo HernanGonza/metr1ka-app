@@ -63,14 +63,4 @@ export const supabase = createClient(
   }
 )
 
-// ==================== NUEVO: Cliente con Service Role (bypassea todo) ====================
-export const supabaseAdmin = createClient(
-  process.env.EXPO_PUBLIC_SUPABASE_URL!,
-  process.env.EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY!,   // ← clave secreta (service_role)
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  }
-)
+// supabaseAdmin eliminado por seguridad — la service role key no debe estar en la app móvil
