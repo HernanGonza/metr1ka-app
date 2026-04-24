@@ -6,6 +6,7 @@ import {
   Marker,
   GeoJSONSource,
   Layer,
+  type CameraRef,
 } from '@maplibre/maplibre-react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useAuth } from '../../lib/auth'
@@ -91,6 +92,7 @@ export default function MiEquipo() {
   const [encuestadorFocus, setEncuestadorFocus] = useState<string | null>(null)
   const [equipoId,         setEquipoId]         = useState<string | null>(null)
   const mapRef = useRef<any>(null)
+  const cameraRef = useRef<CameraRef>(null)
 
   // Cargar equipo, encuestadores y zonas
   useEffect(() => {
@@ -179,13 +181,12 @@ export default function MiEquipo() {
   function focusEncuestador(encId: string) {
     setEncuestadorFocus(encId === encuestadorFocus ? null : encId)
     const ubic = ubicaciones[encId]
-    if (ubic && mapRef.current) {
-      mapRef.current.animateToRegion({
-        latitude: ubic.lat,
-        longitude: ubic.lng,
-        latitudeDelta: 0.005,
-        longitudeDelta: 0.005,
-      }, 600)
+    if (ubic && cameraRef.current) {
+      cameraRef.current.easeTo({
+        center: [ubic.lng, ubic.lat],
+        zoom: 16,
+        duration: 600,
+      })
     }
   }
 
@@ -251,6 +252,7 @@ export default function MiEquipo() {
             attribution={false}
           >
             <Camera
+              ref={cameraRef}
               initialViewState={{
                 center: [regionInicial.longitude, regionInicial.latitude] as [number, number],
                 zoom: 13,
