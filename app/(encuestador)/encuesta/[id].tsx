@@ -107,7 +107,7 @@ function MapaNavegacion({
         {destLat && destLng ? (
           <MLMap
             style={{ flex: 1 }}
-            mapStyle="https://demotiles.maplibre.org/style.json"
+            mapStyle="https://tiles.openfreemap.org/styles/liberty"
             compass={false}
             logo={false}
             attribution={false}

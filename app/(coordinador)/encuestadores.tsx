@@ -245,7 +245,7 @@ export default function MiEquipo() {
           <MLMap
             ref={mapRef}
             style={st.mapa}
-            mapStyle="https://demotiles.maplibre.org/style.json"
+            mapStyle="https://tiles.openfreemap.org/styles/liberty"
             compass={false}
             logo={false}
             attribution={false}
