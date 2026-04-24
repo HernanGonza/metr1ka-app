@@ -1,6 +1,12 @@
 import { useState, useEffect, useRef } from 'react'
 import { View, Text, FlatList, StyleSheet, TouchableOpacity, ScrollView } from 'react-native'
-import MapView, { Marker, Polygon, Circle } from 'react-native-maps'
+import {
+  Map as MLMap,
+  Camera,
+  Marker,
+  GeoJSONSource,
+  Layer,
+} from '@maplibre/maplibre-react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useAuth } from '../../lib/auth'
 import { supabase } from '../../lib/supabase'
@@ -84,7 +90,7 @@ export default function MiEquipo() {
   const [encuestaSelec,    setEncuestaSelec]    = useState<string | null>(null)
   const [encuestadorFocus, setEncuestadorFocus] = useState<string | null>(null)
   const [equipoId,         setEquipoId]         = useState<string | null>(null)
-  const mapRef = useRef<MapView>(null)
+  const mapRef = useRef<any>(null)
 
   // Cargar equipo, encuestadores y zonas
   useEffect(() => {
@@ -119,8 +125,10 @@ export default function MiEquipo() {
       // Encuestas únicas
       const encuestasMap = new Map<string, any>()
       for (const z of (zonasData || [])) {
-        if (z.encuestas && !encuestasMap.has(z.encuesta_id)) {
-          encuestasMap.set(z.encuesta_id, { id: z.encuesta_id, nombre: z.encuestas.nombre })
+        // encuestas puede ser array (Supabase types) pero en runtime es objeto único
+        const enc = Array.isArray(z.encuestas) ? z.encuestas[0] : z.encuestas
+        if (enc && !encuestasMap.has(z.encuesta_id)) {
+          encuestasMap.set(z.encuesta_id, { id: z.encuesta_id, nombre: enc.nombre })
         }
       }
       const encList = Array.from(encuestasMap.values())
@@ -234,51 +242,83 @@ export default function MiEquipo() {
             </Text>
           </View>
 
-          <MapView
+          <MLMap
             ref={mapRef}
             style={st.mapa}
-            initialRegion={regionInicial}
-            showsUserLocation={false}
-            showsCompass={false}
-            toolbarEnabled={false}
+            mapStyle="https://demotiles.maplibre.org/style.json"
+            compass={false}
+            logo={false}
+            attribution={false}
           >
+            <Camera
+              initialViewState={{
+                center: [regionInicial.longitude, regionInicial.latitude] as [number, number],
+                zoom: 13,
+              }}
+            />
+
             {/* Zonas del equipo */}
             {zonasFiltradas.map((zona, zi) => {
               const coords = geojsonACoords(zona.area_geojson)
               const centro = centroZona(coords)
-              const color = COLORES[zi % COLORES.length]
+              const color  = COLORES[zi % COLORES.length]
               if (!coords.length) return null
+              const geojsonZona: GeoJSON.Feature = {
+                type: 'Feature',
+                geometry: {
+                  type: 'Polygon',
+                  coordinates: [coords.map(co => [co.longitude, co.latitude])],
+                },
+                properties: {},
+              }
               return (
-                <View key={zona.id}>
-                  <Polygon
-                    coordinates={coords}
-                    fillColor={`${color}25`}
-                    strokeColor={color}
-                    strokeWidth={2.5}
+                <GeoJSONSource key={`zona-${zona.id}`} id={`zona-${zona.id}`} data={geojsonZona}>
+                  <Layer
+                    type="fill"
+                    id={`zona-fill-${zona.id}`}
+                    paint={{ 'fill-color': `${color}25`, 'fill-outline-color': color }}
                   />
-                  {centro && (
-                    <Marker coordinate={centro} anchor={{ x: 0.5, y: 0.5 }}>
-                      <View style={[st.zonaLabel, { backgroundColor: color }]}>
-                        <Text style={st.zonaLabelText}>{zona.nombre}</Text>
-                      </View>
-                    </Marker>
-                  )}
-                </View>
+                  <Layer
+                    type="line"
+                    id={`zona-line-${zona.id}`}
+                    paint={{ 'line-color': color, 'line-width': 2.5 }}
+                  />
+                </GeoJSONSource>
               )
             })}
 
-            {/* Marcadores de encuestadores con ubicación */}
+            {/* Labels de zonas */}
+            {zonasFiltradas.map((zona, zi) => {
+              const coords = geojsonACoords(zona.area_geojson)
+              const centro = centroZona(coords)
+              const color  = COLORES[zi % COLORES.length]
+              if (!centro) return null
+              return (
+                <Marker
+                  key={`label-${zona.id}`}
+                  id={`label-${zona.id}`}
+                  lngLat={[centro.longitude, centro.latitude] as [number, number]}
+                >
+                  <View style={[st.zonaLabel, { backgroundColor: color }]}>
+                    <Text style={st.zonaLabelText}>{zona.nombre}</Text>
+                  </View>
+                </Marker>
+              )
+            })}
+
+            {/* Marcadores de encuestadores */}
             {encuestadores.map((enc, i) => {
               const ubic = ubicaciones[enc.id]
               if (!ubic?.lat) return null
-              const mins   = calcMinutos(ubic.actualizado_en)
-              const activo = mins !== null && mins < 5
-              const color  = COLORES[i % COLORES.length]
+              const mins    = calcMinutos(ubic.actualizado_en)
+              const activo  = mins !== null && mins < 5
+              const color   = COLORES[i % COLORES.length]
               const isFocus = encuestadorFocus === enc.id
               return (
                 <Marker
                   key={enc.id}
-                  coordinate={{ latitude: ubic.lat, longitude: ubic.lng }}
+                  id={`enc-${enc.id}`}
+                  lngLat={[ubic.lng, ubic.lat] as [number, number]}
                   onPress={() => focusEncuestador(enc.id)}
                 >
                   <View style={[st.markerWrap, isFocus && st.markerFocus]}>
@@ -290,7 +330,7 @@ export default function MiEquipo() {
                 </Marker>
               )
             })}
-          </MapView>
+          </MLMap>
 
           {/* Leyenda de zonas */}
           {zonasFiltradas.length > 0 && (

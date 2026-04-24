@@ -3,7 +3,14 @@ import {
   View, Text, TouchableOpacity, ScrollView, StyleSheet,
   Alert, ActivityIndicator, TextInput, Animated, Dimensions,
 } from 'react-native'
-import MapView, { Marker, Circle } from 'react-native-maps'
+import {
+  Map as MLMap,
+  Camera,
+  UserLocation,
+  Marker,
+  GeoJSONSource,
+  Layer,
+} from '@maplibre/maplibre-react-native'
 import Slider from '@react-native-community/slider'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -98,39 +105,56 @@ function MapaNavegacion({
       {/* Mapa (no se puede cerrar, ocupa toda la pantalla) */}
       <View style={{ flex: 1, position: 'relative' }}>
         {destLat && destLng ? (
-          <MapView
+          <MLMap
             style={{ flex: 1 }}
-            initialRegion={{
-              latitude:      ubicacion?.lat  ?? destLat,
-              longitude:     ubicacion?.lng  ?? destLng,
-              latitudeDelta:  0.005,
-              longitudeDelta: 0.005,
-            }}
-            region={ubicacion ? {
-              latitude:      ubicacion.lat,
-              longitude:     ubicacion.lng,
-              latitudeDelta:  0.003,
-              longitudeDelta: 0.003,
-            } : undefined}
-            showsUserLocation
-            showsMyLocationButton
+            mapStyle="https://demotiles.maplibre.org/style.json"
+            compass={false}
+            logo={false}
+            attribution={false}
           >
-            {/* Destino */}
-            <Marker
-              coordinate={{ latitude: destLat, longitude: destLng }}
-              title="Tu próxima parada"
-              description={parcela?.direccion}
-              pinColor="#1a472a"
+            <Camera
+              initialViewState={{
+                center: [ubicacion?.lng ?? destLng, ubicacion?.lat ?? destLat] as [number, number],
+                zoom: 15,
+              }}
             />
+
+            <UserLocation />
+
             {/* Radio de llegada */}
-            <Circle
-              center={{ latitude: destLat, longitude: destLng }}
-              radius={RADIO_LLEGADA}
-              fillColor="rgba(26,71,42,0.15)"
-              strokeColor="rgba(26,71,42,0.5)"
-              strokeWidth={2}
-            />
-          </MapView>
+            <GeoJSONSource
+              id="radio-llegada"
+              data={{
+                type: 'Feature',
+                geometry: { type: 'Point', coordinates: [destLng, destLat] },
+                properties: {},
+              }}
+            >
+              <Layer
+                type="circle"
+                id="radio-fill"
+                paint={{
+                  'circle-radius': RADIO_LLEGADA / 1.2,
+                  'circle-color': 'rgba(26,71,42,0.15)',
+                  'circle-stroke-color': 'rgba(26,71,42,0.5)',
+                  'circle-stroke-width': 2,
+                }}
+              />
+            </GeoJSONSource>
+
+            {/* Destino — marcador verde */}
+            <Marker lngLat={[destLng, destLat] as [number, number]}>
+              <View style={{
+                width: 32, height: 32, borderRadius: 16,
+                backgroundColor: '#1a472a',
+                borderWidth: 3, borderColor: '#fff',
+                alignItems: 'center', justifyContent: 'center',
+                shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 4,
+              }}>
+                <Text style={{ fontSize: 14 }}>📍</Text>
+              </View>
+            </Marker>
+          </MLMap>
         ) : (
           <View style={mn.sinMapa}>
             <Text style={{ fontSize: 40 }}>📍</Text>
