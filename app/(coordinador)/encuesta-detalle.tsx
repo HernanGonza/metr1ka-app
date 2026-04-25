@@ -162,9 +162,9 @@ export default function EncuestaDetalle() {
             >
               <Camera
                 ref={cameraRef}
-                defaultSettings={{
-                  centerCoordinate: centroInicial as [number, number],
-                  zoomLevel: 13,
+                initialViewState={{
+                  center: centroInicial as [number, number],
+                  zoom: 13,
                 }}
               />
 
