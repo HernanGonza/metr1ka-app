@@ -40,6 +40,12 @@ export default function CoordinadorLayout() {
           tabBarIcon: ({ color, size }) => <ClipboardList size={size} color={color} strokeWidth={2} />,
         }}
       />
+      <Tabs.Screen
+        name="encuesta-detalle"
+        options={{
+          href: null,  // Ocultar de los tabs
+        }}
+      />
     </Tabs>
   )
 }

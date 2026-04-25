@@ -54,11 +54,13 @@ export function useEncuestasEncuestador(
     return () => { supabase.removeChannel(canal) }
   }, [encuestasIdsRef.current.length])
 
-  function calcularEnZona(enc: any, pos: { lat: number; lng: number } | undefined, zona: ZonaActiva | null | undefined): boolean {
+  function calcularEnZona(enc: any, pos: { lat: number; lng: number } | undefined, zona: ZonaActiva | null | undefined): boolean | null {
     if (!enc.geofencing_activo) return true
+    // Sin GPS todavía → null significa "evaluando"
+    if (!pos && !zona) return null
     if (zona) return zona.zona_id === enc.zona_id
     if (pos) return encuestaEnZona(pos.lat, pos.lng, enc.zona_geojson, enc.geofencing_activo)
-    return true
+    return null
   }
 
   async function autoAsignarYCargar() {
