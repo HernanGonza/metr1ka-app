@@ -135,6 +135,9 @@ export default function CoordinadorDashboard() {
       <AppHeader nombre={perfil?.nombre_completo} rol="coordinador" subtitulo={data?.equipo_nombre} onSignOut={signOut} color="#0369a1" />
 
       {/* KPIs */}
+      <View style={{ paddingHorizontal: 16, marginBottom: 8 }}>
+        <Text style={cd.secTitle}>Respuestas</Text>
+      </View>
       <View style={cd.kpiRow}>
         <View style={[cd.kpi, { backgroundColor: '#d8f3dc' }]}>
           <Text style={[cd.kpiVal, { color: '#1a472a' }]}>{data?.sesiones_hoy ?? 0}</Text>
