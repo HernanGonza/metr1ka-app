@@ -9,15 +9,21 @@ export async function pedirPermisoUbicacion(): Promise<boolean> {
 export async function getUbicacionActual(): Promise<{ lat: number; lng: number } | null> {
   try {
     const loc = await Location.getCurrentPositionAsync({
-      accuracy: Location.Accuracy.Balanced,
-      timeInterval: 5000,
+      accuracy: Location.Accuracy.High, // 🔴 importante
     })
+
     return { lat: loc.coords.latitude, lng: loc.coords.longitude }
-  } catch {
+
+  } catch (e) {
+    console.warn('[location] getCurrent falló, intento lastKnown')
+
     try {
       const loc = await Location.getLastKnownPositionAsync()
-      if (loc) return { lat: loc.coords.latitude, lng: loc.coords.longitude }
+      if (loc) {
+        return { lat: loc.coords.latitude, lng: loc.coords.longitude }
+      }
     } catch {}
+
     return null
   }
 }
