@@ -342,7 +342,7 @@ export default function AdminDashboard() {
 
   return (
     <ScrollView
-      style={s.container}
+      style={[s.container, { paddingTop: insets.top }]}
       refreshControl={<RefreshControl refreshing={refresh} onRefresh={() => { setRefresh(true); fetchCatalogos() }} tintColor="#1a472a" />}
     >
       <AppHeader

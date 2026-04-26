@@ -122,6 +122,7 @@ export default function EncuestasCoordinador() {
                     encuestaId: item.id,
                     equipoId: item.equipo_id,
                     nombre: item.nombre,
+                    tipoEncuesta: item.tipo_encuesta,
                   },
                 })}
               >
