@@ -28,20 +28,9 @@ function calcularEstado(
   encuestaEnZona: (id: string) => boolean | null,
   ubicacion: { lat: number; lng: number } | null,
 ): EstadoEncuesta {
-  // Verificar fecha
+  // Solo verificar fecha — geofencing desactivado temporalmente
   const hoy = new Date().toISOString().slice(0, 10)
   if (enc.fecha_inicio && enc.fecha_inicio > hoy) return 'sin_fecha'
-
-  // Sin GPS
-  if (!ubicacion) return 'sin_gps'
-
-  // Verificar zona
-  if (enc.geofencing_activo) {
-    const enZona = encuestaEnZona(enc.id)
-    if (enZona === null) return 'sin_gps'
-    if (!enZona) return 'fuera_zona'
-  }
-
   return 'disponible'
 }
 
