@@ -45,10 +45,7 @@
       "expo-secure-store"
     ],
     "extra": {
-      "router": {},
-      "eas": {
-        "projectId": "6689590b-7a55-4a8d-ac17-a114b94f4c9f"
-      }
+      "router": {}
     },
     "owner": "hernangozalez"
   }
