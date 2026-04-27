@@ -1,7 +1,18 @@
+// Este hook ya no se usa directamente — la lógica está en home.tsx
+// Se mantiene como referencia pero sin el import roto de ZonaActiva
+
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { puntoEnPoligono } from '../lib/location'
-import { ZonaActiva } from './useGeofencing'
+
+type ZonaActiva = {
+  zona_id: string
+  encuesta_id: string
+  encuesta_nombre: string
+  area_geojson: any
+  geofencing_activo: boolean
+  equipo_id: string
+}
 
 function encuestaEnZona(
   lat: number,
@@ -33,7 +44,6 @@ export function useEncuestasEncuestador(
     autoAsignarYCargar()
   }, [encuestadorId])
 
-  // Re-evaluar zonas cuando cambia ubicación
   useEffect(() => {
     if (!encuestadorId || !ubicacion) return
     setEncuestas(prev => prev.map(enc => ({
@@ -42,7 +52,6 @@ export function useEncuestasEncuestador(
     })))
   }, [ubicacion?.lat, ubicacion?.lng, zonaActual?.zona_id])
 
-  // Realtime
   useEffect(() => {
     if (!encuestasIdsRef.current.length) return
     const canal = supabase
@@ -54,9 +63,12 @@ export function useEncuestasEncuestador(
     return () => { supabase.removeChannel(canal) }
   }, [encuestasIdsRef.current.length])
 
-  function calcularEnZona(enc: any, pos: { lat: number; lng: number } | undefined, zona: ZonaActiva | null | undefined): boolean | null {
+  function calcularEnZona(
+    enc: any,
+    pos: { lat: number; lng: number } | undefined,
+    zona: ZonaActiva | null | undefined
+  ): boolean | null {
     if (!enc.geofencing_activo) return true
-    // Sin GPS todavía → null significa "evaluando"
     if (!pos && !zona) return null
     if (zona) return zona.zona_id === enc.zona_id
     if (pos) return encuestaEnZona(pos.lat, pos.lng, enc.zona_geojson, enc.geofencing_activo)
@@ -66,15 +78,12 @@ export function useEncuestasEncuestador(
   async function autoAsignarYCargar() {
     setLoading(true)
 
-    // 1. Crear asignaciones automáticamente si el encuestador pertenece a un equipo
-    //    que tiene zonas asignadas. Idempotente — no duplica si ya existen.
     if (!autoAsignadoRef.current) {
       const { error: errAuto } = await supabase.rpc('auto_asignar_encuestador')
       if (errAuto) console.error('auto_asignar_encuestador:', errAuto.message)
       else autoAsignadoRef.current = true
     }
 
-    // 2. Cargar encuestas (ya tienen asignacion_id propio del encuestador)
     const { data, error } = await supabase.rpc('get_encuestas_encuestador')
     if (error) {
       console.error('get_encuestas_encuestador:', error.message)
@@ -87,14 +96,10 @@ export function useEncuestasEncuestador(
       enZona: calcularEnZona(enc, ubicacion, zonaActual),
     }))
 
-    // Deduplicar por encuesta.id: si una misma encuesta tiene varias zonas,
-    // mostrar solo la que está activa (enZona=true), o la primera si ninguna lo está
     const seen = new Map<string, any>()
     for (const enc of todas) {
       const prev = seen.get(enc.id)
-      if (!prev || enc.enZona === true) {
-        seen.set(enc.id, enc)
-      }
+      if (!prev || enc.enZona === true) seen.set(enc.id, enc)
     }
     const lista = Array.from(seen.values())
 
