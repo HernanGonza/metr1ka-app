@@ -45,7 +45,10 @@
       "expo-secure-store"
     ],
     "extra": {
-      "router": {}
+      "router": {},
+      "eas": {
+        "projectId": "63f7f8cd-5597-4002-93d9-d30d3f3df5c2"
+      }
     },
     "owner": "paralelo"
   }
