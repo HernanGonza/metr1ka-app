@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator, RefreshControl } from 'react-native'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { View, Text, FlatList, StyleSheet, ActivityIndicator, RefreshControl } from 'react-native'
 import { supabase } from '../../lib/supabase'
+import { AppHeader } from '../../components/UI/AppHeader'
 import { useAuth } from '../../lib/auth'
 
 type Encuestador = {
@@ -24,8 +24,7 @@ function calcMins(ts?: string) {
 }
 
 export default function MiEquipo() {
-  const { perfil }             = useAuth()
-  const insets                 = useSafeAreaInsets()
+  const { perfil, signOut }    = useAuth()
   const [encuestadores, setEncuestadores] = useState<Encuestador[]>([])
   const [loading, setLoading]  = useState(true)
   const [refresh, setRefresh]  = useState(false)
@@ -133,13 +132,14 @@ export default function MiEquipo() {
   const inactivos = encuestadores.filter(e => !esActivo(e.actualizado_en))
 
   return (
-    <View style={[s.page, { paddingTop: insets.top }]}>
-      {/* Header */}
-      <View style={s.header}>
-        <Text style={s.headerEyebrow}>Coordinador</Text>
-        <Text style={s.headerTitle}>Mi equipo</Text>
-        {equipoNombre ? <Text style={s.headerSub}>{equipoNombre}</Text> : null}
-      </View>
+    <View style={s.page}>
+      <AppHeader
+        nombre={perfil?.nombre_completo}
+        rol="coordinador"
+        subtitulo={equipoNombre ? `Mi equipo · ${equipoNombre}` : 'Mi equipo'}
+        onSignOut={signOut}
+        color="#1a472a"
+      />
 
       {loading ? (
         <View style={s.center}><ActivityIndicator color="#1a472a" size="large" /></View>
@@ -147,7 +147,7 @@ export default function MiEquipo() {
         <FlatList
           data={encuestadores}
           keyExtractor={e => e.id}
-          contentContainerStyle={{ padding: 16, gap: 10, paddingBottom: insets.bottom + 20 }}
+          contentContainerStyle={{ padding: 16, gap: 10, paddingBottom: 32 }}
           refreshControl={
             <RefreshControl
               refreshing={refresh}
@@ -216,12 +216,8 @@ export default function MiEquipo() {
 }
 
 const s = StyleSheet.create({
-  page:        { flex: 1, backgroundColor: '#f2f1ee' },
+  page:        { flex: 1, backgroundColor: '#f2f1ee', paddingTop: 0 },
   center:      { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  header:      { paddingHorizontal: 20, paddingVertical: 16, backgroundColor: '#1a472a', borderBottomWidth: 1, borderBottomColor: '#2d6a4f' },
-  headerEyebrow: { fontSize: 11, fontWeight: '700', color: '#a7f3d0', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 2 },
-  headerTitle: { fontSize: 24, fontWeight: '800', color: '#fff' },
-  headerSub:   { fontSize: 13, color: 'rgba(255,255,255,0.7)', marginTop: 2 },
   statsRow:    { flexDirection: 'row', gap: 8, marginBottom: 16 },
   statCard:    { flex: 1, borderRadius: 10, padding: 12, alignItems: 'center' },
   statVal:     { fontSize: 24, fontWeight: '800' },

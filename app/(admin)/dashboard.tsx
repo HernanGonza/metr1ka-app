@@ -352,27 +352,17 @@ export default function AdminDashboard() {
         color="#1a472a"
       />
 
-      {/* Selector de encuesta */}
-      {encuestas.length > 1 && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ paddingHorizontal: 16, marginBottom: 16 }}>
-          <View style={{ flexDirection: 'row', gap: 6 }}>
-            {encuestas.map(enc => (
-              <TouchableOpacity
-                key={enc.id}
-                onPress={() => handleEncuestaChange(enc.id)}
-                style={[s.chip, encuestaId === enc.id && s.chipActive]}
-              >
-                <Text style={[s.chipText, encuestaId === enc.id && s.chipTextActive]} numberOfLines={1}>
-                  {enc.nombre}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </ScrollView>
-      )}
-
-      {/* Filtros */}
+      {/* Filtros — encuesta como selector */}
       <View style={s.filtrosRow}>
+        {encuestas.length > 1 && (
+          <Selector
+            label="Encuesta"
+            value={encuestaId}
+            opciones={encuestas}
+            onSelect={id => id && handleEncuestaChange(id)}
+            placeholder="Seleccionar encuesta"
+          />
+        )}
         <Selector
           label="Equipo"
           value={equipoId}

@@ -6,6 +6,7 @@ import {
 import { useRouter } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { supabase } from '../../lib/supabase'
+import { AppHeader } from '../../components/UI/AppHeader'
 import { useAuth } from '../../lib/auth'
 
 type Encuesta = {
@@ -38,7 +39,7 @@ function formatFecha(fecha: string | null) {
 }
 
 export default function EncuestasCoordinador() {
-  const { perfil }   = useAuth()
+  const { perfil, signOut } = useAuth()
   const router       = useRouter()
   const insets       = useSafeAreaInsets()
   const [encuestas, setEncuestas] = useState<Encuesta[]>([])
@@ -95,11 +96,14 @@ export default function EncuestasCoordinador() {
   }
 
   return (
-    <View style={[s.page, { paddingTop: insets.top }]}>
-      <View style={s.header}>
-        <Text style={s.headerEyebrow}>Coordinador</Text>
-        <Text style={s.headerTitle}>Encuestas</Text>
-      </View>
+    <View style={s.page}>
+      <AppHeader
+        nombre={perfil?.nombre_completo}
+        rol="coordinador"
+        subtitulo="Encuestas de mi equipo"
+        onSignOut={signOut}
+        color="#1a472a"
+      />
 
       {loading ? (
         <View style={s.center}><ActivityIndicator color="#1a472a" size="large" /></View>
@@ -222,9 +226,6 @@ export default function EncuestasCoordinador() {
 const s = StyleSheet.create({
   page:          { flex: 1, backgroundColor: '#f2f1ee' },
   center:        { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  header:        { paddingHorizontal: 20, paddingVertical: 16, backgroundColor: '#1a472a', borderBottomWidth: 1, borderBottomColor: '#2d6a4f' },
-  headerEyebrow: { fontSize: 11, fontWeight: '700', color: '#a7f3d0', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 2 },
-  headerTitle:   { fontSize: 24, fontWeight: '800', color: '#fff' },
   empty:         { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
   emptyIcon:     { fontSize: 48, marginBottom: 12 },
   emptyTitle:    { fontSize: 18, fontWeight: '700', color: '#374151', marginBottom: 8 },
