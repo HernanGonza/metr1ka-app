@@ -158,8 +158,8 @@ function Selector({ label, value, opciones, onSelect, placeholder }: {
   return (
     <>
       <TouchableOpacity style={fs.selector} onPress={() => setOpen(true)}>
-        <Text style={{ fontSize: 10, color: '#888', fontWeight: '600', marginBottom: 2 }}>{label}</Text>
-        <Text style={{ fontSize: 12, fontWeight: '700', color: value ? '#111' : '#aaa' }} numberOfLines={1}>
+        <Text style={{ fontSize: 11, color: '#6b7280', fontWeight: '700', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 }}>{label}</Text>
+        <Text style={{ fontSize: 14, fontWeight: '600', color: value ? '#111827' : '#9ca3af' }} numberOfLines={1}>
           {selected?.nombre || placeholder}
         </Text>
       </TouchableOpacity>
@@ -342,7 +342,7 @@ export default function AdminDashboard() {
 
   return (
     <ScrollView
-      style={[s.container, { paddingTop: insets.top }]}
+      style={s.container}
       refreshControl={<RefreshControl refreshing={refresh} onRefresh={() => { setRefresh(true); fetchCatalogos() }} tintColor="#1a472a" />}
     >
       <AppHeader
@@ -352,38 +352,46 @@ export default function AdminDashboard() {
         color="#1a472a"
       />
 
-      {/* Filtros — encuesta como selector */}
-      <View style={s.filtrosRow}>
+      {/* Filtros — grid 2x2 */}
+      <View style={s.filtrosGrid}>
         {encuestas.length > 1 && (
-          <Selector
-            label="Encuesta"
-            value={encuestaId}
-            opciones={encuestas}
-            onSelect={id => id && handleEncuestaChange(id)}
-            placeholder="Seleccionar encuesta"
-          />
+          <View style={s.filtroItem}>
+            <Selector
+              label="Encuesta"
+              value={encuestaId}
+              opciones={encuestas}
+              onSelect={id => id && handleEncuestaChange(id)}
+              placeholder="Seleccionar encuesta"
+            />
+          </View>
         )}
-        <Selector
-          label="Equipo"
-          value={equipoId}
-          opciones={equipos}
-          onSelect={setEquipoId}
-          placeholder="Todos"
-        />
-        <Selector
-          label="Zona"
-          value={zonaId}
-          opciones={zonasFiltradas}
-          onSelect={setZonaId}
-          placeholder="Todas"
-        />
-        <Selector
-          label="Encuestador"
-          value={encuestadorId}
-          opciones={encuestadoresFiltrados}
-          onSelect={setEncuestadorId}
-          placeholder="Todos"
-        />
+        <View style={s.filtroItem}>
+          <Selector
+            label="Equipo"
+            value={equipoId}
+            opciones={equipos}
+            onSelect={setEquipoId}
+            placeholder="Todos los equipos"
+          />
+        </View>
+        <View style={s.filtroItem}>
+          <Selector
+            label="Zona"
+            value={zonaId}
+            opciones={zonasFiltradas}
+            onSelect={setZonaId}
+            placeholder="Todas las zonas"
+          />
+        </View>
+        <View style={s.filtroItem}>
+          <Selector
+            label="Encuestador"
+            value={encuestadorId}
+            opciones={encuestadoresFiltrados}
+            onSelect={setEncuestadorId}
+            placeholder="Todos"
+          />
+        </View>
       </View>
 
       {/* KPIs */}
@@ -454,6 +462,8 @@ const s = StyleSheet.create({
   chipText:         { fontSize: 12, fontWeight: '600', color: '#888' },
   chipTextActive:   { color: '#1a472a' },
   filtrosRow:       { flexDirection: 'row', gap: 8, paddingHorizontal: 16, marginBottom: 12 },
+  filtrosGrid:      { flexDirection: 'row', flexWrap: 'wrap', gap: 10, paddingHorizontal: 16, marginBottom: 16, marginTop: 16 },
+  filtroItem:       { width: '47%' },
   kpiRow:           { flexDirection: 'row', paddingHorizontal: 16, gap: 8, marginBottom: 12 },
   kpi:              { flex: 1, borderRadius: 14, padding: 14 },
   kpiVal:           { fontSize: 30, fontWeight: '800', letterSpacing: -1 },
@@ -471,7 +481,7 @@ const s = StyleSheet.create({
 })
 
 const fs = StyleSheet.create({
-  selector:   { flex: 1, backgroundColor: '#fff', borderRadius: 10, padding: 10, borderWidth: 1.5, borderColor: '#e5e7eb' },
+  selector:   { backgroundColor: '#fff', borderRadius: 12, padding: 14, borderWidth: 1.5, borderColor: '#e5e7eb', minHeight: 64 },
   overlay:    { flex: 1, backgroundColor: 'rgba(0,0,0,.4)', justifyContent: 'flex-end' },
   sheet:      { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, maxHeight: '60%' },
   sheetTitle: { fontSize: 15, fontWeight: '800', color: '#111', marginBottom: 12 },
