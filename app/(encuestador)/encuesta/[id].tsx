@@ -91,10 +91,13 @@ function MapaNavegacion({
           </TouchableOpacity>
           <Text style={mn.statsText}>{stats.completadas}/{stats.total_parcelas} encuestas</Text>
         </View>
-        <Text style={mn.headerLabel}>Próxima parada — dirigite a esta dirección</Text>
-        <Text style={mn.headerDir}>{parcela?.direccion || 'Parcela sin dirección'}</Text>
+        <Text style={mn.headerLabel}>Próxima visita</Text>
+        <Text style={mn.headerDir}>{parcela?.direccion || 'Calculando dirección...'}</Text>
+        <Text style={mn.headerSub}>
+          {`Propiedad ${(stats.completadas ?? 0) + 1} de ${stats.total_parcelas} — completadas: ${stats.completadas}`}
+        </Text>
         <View style={mn.statsRow}>
-          <Text style={mn.statsText}>{stats.completadas} / {stats.total_parcelas} encuestas</Text>
+          <Text style={mn.statsText}>{stats.completadas}/{stats.total_parcelas}</Text>
           <View style={mn.progBar}>
             <View style={[mn.progFill, { width: `${progreso}%` as any }]} />
           </View>
@@ -162,6 +165,16 @@ function MapaNavegacion({
           </View>
         )}
 
+        {/* Badge de manzana de reemplazo */}
+        {parcela?.es_manzana_reemplazo && (
+          <View style={{ position: 'absolute', top: 12, left: 12, right: 12, backgroundColor: '#fef3c7', borderRadius: 10, padding: 10, borderWidth: 1.5, borderColor: '#f59e0b', flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Text style={{ fontSize: 16 }}>🏘️</Text>
+            <Text style={{ fontSize: 12, color: '#92400e', fontWeight: '600', flex: 1 }}>
+              Manzana de reemplazo — seguí el mismo procedimiento de siempre
+            </Text>
+          </View>
+        )}
+
         {/* Badge de llegada */}
         {enParcela && (
           <View style={mn.llegadaBadge}>
@@ -199,7 +212,8 @@ const mn = StyleSheet.create({
   backBtn:      { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 4, paddingHorizontal: 8, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.15)' },
   backBtnText:  { color: '#fff', fontSize: 13, fontWeight: '700' },
   headerLabel:  { fontSize: 11, fontWeight: '700', color: '#a7f3d0', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 },
-  headerDir:    { fontSize: 20, fontWeight: '800', color: '#fff', marginBottom: 12 },
+  headerDir:    { fontSize: 20, fontWeight: '800', color: '#fff', marginBottom: 4 },
+  headerSub:    { fontSize: 12, color: '#a7f3d0', marginBottom: 10 },
   statsRow:     { flexDirection: 'row', alignItems: 'center', gap: 8 },
   statsText:    { fontSize: 12, color: '#a7f3d0', fontWeight: '600' },
   progBar:      { flex: 1, height: 4, backgroundColor: 'rgba(255,255,255,.2)', borderRadius: 2 },
@@ -381,14 +395,25 @@ export default function EncuestaScreen() {
     setLoading(false)
   }
 
-  async function cargarProximaParcela() {
+  async function cargarProximaParcela(mostrarAvisoReemplazo = false) {
     if (!asignacion) return
     setLoadingP(true)
     const { data, error } = await supabase.rpc('get_proxima_parcela', {
       p_asignacion_id: asignacion,
     })
-    if (!error && data?.length > 0) setParcela(data[0])
-    else if (!error) setParcela(null)  // sin más parcelas
+    if (!error && data?.length > 0) {
+      const prox = data[0]
+      setParcela(prox)
+      if (mostrarAvisoReemplazo && prox.es_manzana_reemplazo) {
+        Alert.alert(
+          '🏘️ Manzana de reemplazo',
+          'No hay más viviendas disponibles en tu manzana asignada. El sistema te asignó una manzana cercana dentro de la zona para continuar.',
+          [{ text: 'Entendido', style: 'default' }]
+        )
+      }
+    } else if (!error) {
+      setParcela(null)
+    }
     setLoadingP(false)
   }
 
@@ -429,7 +454,7 @@ export default function EncuestaScreen() {
     // Resetear y cargar siguiente
     setRespuestas({}); setRazonNR(''); setNoResponde(false)
     setPaso(0); setOcultas(new Set())
-    await cargarProximaParcela()
+    await cargarProximaParcela(true)
     setPantalla('mapa')
   }
 
@@ -507,7 +532,7 @@ export default function EncuestaScreen() {
   async function continuarSiguiente() {
     setRespuestas({}); setRazonNR(''); setNoResponde(false)
     setPaso(0); setOcultas(new Set()); setPantalla('mapa')
-    await cargarProximaParcela()
+    await cargarProximaParcela(true)
   }
 
   // ══════════════════ RENDER ══════════════════
