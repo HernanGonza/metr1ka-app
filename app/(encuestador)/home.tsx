@@ -147,10 +147,13 @@ export default function Home() {
       return
     }
 
-    // Deduplicar por id de encuesta
+    // ✅ Deduplicar por asignacion_id (no por encuesta_id)
+    // Esto permite que un encuestador vea múltiples asignaciones de la misma encuesta
+    // si tiene diferentes zonas asignadas
     const seen = new Map<string, Encuesta>()
     for (const enc of (data || [])) {
-      if (!seen.has(enc.id)) seen.set(enc.id, enc)
+      const key = enc.asignacion_id // ← Clave única por asignación
+      if (!seen.has(key)) seen.set(key, enc)
     }
     setEncuestas(Array.from(seen.values()))
     setLoading(false)
@@ -221,7 +224,8 @@ export default function Home() {
 
       <FlatList
         data={encuestasOrdenadas}
-        keyExtractor={e => e.id}
+        // ✅ Usar asignacion_id como key para evitar conflictos con asignaciones múltiples
+        keyExtractor={e => e.asignacion_id}
         contentContainerStyle={[s.list, { paddingBottom: insets.bottom + 24 }]}
         onRefresh={async () => { await cargarEncuestas(); await refetchZonas() }}
         refreshing={loading}
