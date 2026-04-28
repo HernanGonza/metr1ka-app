@@ -132,7 +132,7 @@ export default function CoordinadorDashboard() {
       style={cd.container}
       refreshControl={<RefreshControl refreshing={refresh} onRefresh={() => { setRefresh(true); fetchData() }} tintColor="#1a472a" />}
     >
-      <AppHeader nombre={perfil?.nombre_completo} rol="coordinador" subtitulo={data?.equipo_nombre} onSignOut={signOut} color="#0369a1" />
+      <AppHeader nombre={perfil?.nombre_completo} rol="coordinador" subtitulo={data?.equipo_nombre} onSignOut={signOut} color="#1a472a" />
 
       {/* KPIs */}
       <View style={{ paddingHorizontal: 16, marginBottom: 8 }}>

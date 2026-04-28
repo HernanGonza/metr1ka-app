@@ -8,7 +8,7 @@ export default function CoordinadorLayout() {
   return (
     <Tabs screenOptions={{
       headerShown: false,
-      tabBarActiveTintColor: '#0369a1',
+      tabBarActiveTintColor: '#1a472a',
       tabBarInactiveTintColor: '#9ca3af',
       tabBarStyle: {
         backgroundColor: '#fff',
@@ -42,9 +42,7 @@ export default function CoordinadorLayout() {
       />
       <Tabs.Screen
         name="encuesta-detalle"
-        options={{
-          href: null,  // Ocultar de los tabs
-        }}
+        options={{ href: null }}
       />
     </Tabs>
   )

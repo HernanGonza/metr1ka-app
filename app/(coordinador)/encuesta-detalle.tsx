@@ -5,14 +5,8 @@ import {
 } from 'react-native'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import {
-  Map as MLMap,
-  Camera,
-  Marker,
-  GeoJSONSource,
-  Layer,
-  type CameraRef,
-} from '@maplibre/maplibre-react-native'
+import { MapLibreDisponible, MLMap, Camera, Marker, GeoJSONSource, Layer, MapaPlaceholder } from '../../components/MapaSeguro'
+import type { CameraRef } from '@maplibre/maplibre-react-native'
 import { supabase } from '../../lib/supabase'
 
 type Encuestador = {
@@ -198,7 +192,7 @@ export default function EncuestaDetalle() {
 
           {/* Mapa */}
           <View style={s.mapaWrap}>
-            <MLMap style={s.mapa} mapStyle="https://tiles.openfreemap.org/styles/liberty"
+            {!MapLibreDisponible ? <MapaPlaceholder /> : <MLMap style={s.mapa} mapStyle="https://tiles.openfreemap.org/styles/liberty"
               compass={false} logo={false} attribution={false}>
               <Camera ref={cameraRef}
                 initialViewState={{ center: defaultCenter, zoom: mapBounds?.zoom || 14 }} />
@@ -267,6 +261,7 @@ export default function EncuestaDetalle() {
               })}
             </MLMap>
 
+            }
             {/* Leyenda */}
             <View style={s.leyenda}>
               <Text style={[s.leyendaItem, { color: '#16a34a' }]}>● Completada</Text>

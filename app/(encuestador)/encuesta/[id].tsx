@@ -4,13 +4,8 @@ import {
   Alert, ActivityIndicator, TextInput, Animated, Dimensions,
 } from 'react-native'
 import {
-  Map as MLMap,
-  Camera,
-  UserLocation,
-  Marker,
-  GeoJSONSource,
-  Layer,
-} from '@maplibre/maplibre-react-native'
+  MapLibreDisponible, MLMap, Camera, UserLocation, Marker, GeoJSONSource, Layer, MapaPlaceholder,
+} from '../../../components/MapaSeguro'
 import Slider from '@react-native-community/slider'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -108,7 +103,7 @@ function MapaNavegacion({
       {/* Mapa (no se puede cerrar, ocupa toda la pantalla) */}
       <View style={{ flex: 1, position: 'relative' }}>
         {destLat && destLng ? (
-          <MLMap
+          !MapLibreDisponible ? <MapaPlaceholder mensaje="Mapa de navegación disponible en la app compilada" /> : <MLMap
             style={{ flex: 1 }}
             mapStyle="https://tiles.openfreemap.org/styles/liberty"
             compass={false}
@@ -159,10 +154,12 @@ function MapaNavegacion({
             </Marker>
           </MLMap>
         ) : (
+          MapLibreDisponible ? (
           <View style={mn.sinMapa}>
             <Text style={{ fontSize: 40 }}>📍</Text>
             <Text style={{ color: '#666', marginTop: 8 }}>Calculando posición...</Text>
           </View>
+          ) : null
         )}
 
         {/* Badge de manzana de reemplazo */}
