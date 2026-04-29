@@ -242,7 +242,12 @@ function PreguntaCard({ pregunta, respuesta, onChange, onSiguiente, onAnterior, 
   const opciones     = [...(pregunta.opciones_pregunta || [])].sort((a: any, b: any) => a.orden - b.orden)
   const esEdad       = pregunta.clave_base === 'edad'
   // Para opcion_multiple el valor es un objeto {opcionId, texto}
-  const tieneRespuesta = respuesta !== null && respuesta !== undefined && respuesta !== ''
+  const tieneRespuesta = pregunta.tipo === 'matriz' ? (() => {
+    const filas = (pregunta.config_matriz?.filas || [])
+    if (!filas.length) return false
+    const val = respuesta ? (typeof respuesta === 'string' ? JSON.parse(respuesta) : respuesta) : {}
+    return filas.every((_: any, fi: number) => val[fi] !== undefined)
+  })() : (respuesta !== null && respuesta !== undefined && respuesta !== '')
   const puedeAvanzar = !pregunta.requerida || tieneRespuesta
 
   return (
@@ -316,6 +321,57 @@ function PreguntaCard({ pregunta, respuesta, onChange, onSiguiente, onAnterior, 
           value={respuesta || ''} onChangeText={onChange} textAlignVertical="top" />
       )}
 
+      {pregunta.tipo === 'matriz' && (() => {
+        const cfg      = pregunta.config_matriz || { filas: [], columnas: [] }
+        const filas    = (cfg.filas    || []).map((f: any) => typeof f === 'string' ? f : f.texto)
+        const columnas = (cfg.columnas || []).map((c: any) => typeof c === 'string' ? c : c.texto)
+        if (!filas.length || !columnas.length) return null
+        const val: Record<number, string> = respuesta ? (typeof respuesta === 'string' ? JSON.parse(respuesta) : respuesta) : {}
+        const COL_W = Math.max(56, Math.floor(240 / columnas.length))
+        const ROW_LABEL_W = 150
+        const totalW = ROW_LABEL_W + COL_W * columnas.length
+        return (
+          <ScrollView horizontal showsHorizontalScrollIndicator={true} style={{ marginTop: 4 }}>
+            <View style={{ width: totalW }}>
+              {/* Header columnas */}
+              <View style={{ flexDirection: 'row', borderBottomWidth: 1.5, borderBottomColor: '#e5e7eb', paddingBottom: 8, marginBottom: 2 }}>
+                <View style={{ width: ROW_LABEL_W }} />
+                {columnas.map((col, ci) => (
+                  <View key={ci} style={{ width: COL_W, alignItems: 'center', paddingHorizontal: 2 }}>
+                    <Text style={{ fontSize: 9, fontWeight: '700', color: '#6b7280', textAlign: 'center', textTransform: 'uppercase', letterSpacing: 0.3 }} numberOfLines={3}>{col}</Text>
+                  </View>
+                ))}
+              </View>
+              {/* Filas */}
+              {filas.map((fila, fi) => (
+                <View key={fi} style={{ flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: '#f3f4f6', backgroundColor: fi % 2 === 0 ? 'transparent' : 'rgba(0,0,0,0.01)', minHeight: 48 }}>
+                  <View style={{ width: ROW_LABEL_W, paddingRight: 8 }}>
+                    <Text style={{ fontSize: 13, color: '#374151', lineHeight: 18 }}>{fila}</Text>
+                  </View>
+                  {columnas.map((col, ci) => {
+                    const activo = val[fi] === col
+                    return (
+                      <TouchableOpacity key={ci} style={{ width: COL_W, alignItems: 'center', justifyContent: 'center' }}
+                        onPress={() => {
+                          const nuevo = { ...val, [fi]: col }
+                          onChange(typeof respuesta === 'string' ? JSON.stringify(nuevo) : nuevo)
+                        }}>
+                        <View style={{ width: 24, height: 24, borderRadius: 12, borderWidth: 2,
+                          borderColor: activo ? '#1a472a' : '#d1d5db',
+                          backgroundColor: activo ? '#1a472a' : '#fff',
+                          alignItems: 'center', justifyContent: 'center' }}>
+                          {activo && <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#fff' }} />}
+                        </View>
+                      </TouchableOpacity>
+                    )
+                  })}
+                </View>
+              ))}
+            </View>
+          </ScrollView>
+        )
+      })()}
+
       <View style={s.navRow}>
         {paso > 0 && (
           <TouchableOpacity style={s.btnSecondary} onPress={onAnterior}>
@@ -349,10 +405,13 @@ export default function EncuestaScreen() {
   const [preguntas,  setPreguntas]  = useState<any[]>([])
   const [razonesNR,  setRazonesNR]  = useState<string[]>([])
   const [loading,    setLoading]    = useState(true)
+  const esCallejera = encuesta?.tipo_encuesta === 'callejera'
 
   // Navegación
   const [parcela,    setParcela]    = useState<any>(null)   // próxima parcela
   const [loadingP,   setLoadingP]   = useState(false)
+  // Estado callejera
+  const [estadoCalle, setEstadoCalle] = useState<{puede_encuestar:boolean,completadas:number,cuota:number,restantes:number}|null>(null)
 
   // Estado de encuesta
   const [pantalla,   setPantalla]   = useState<Pantalla>('mapa')
@@ -367,9 +426,17 @@ export default function EncuestaScreen() {
   useEffect(() => {
     if (id && perfil?.organizacion_id) {
       cargarEncuesta()
-      cargarProximaParcela()
     }
   }, [id, perfil?.organizacion_id])
+
+  useEffect(() => {
+    if (!encuesta) return
+    if (encuesta.tipo_encuesta === 'callejera') {
+      cargarEstadoCallejera()
+    } else {
+      cargarProximaParcela()
+    }
+  }, [encuesta?.id])
 
   async function cargarEncuesta() {
     const { data } = await supabase.rpc('get_encuesta_full', {
@@ -390,6 +457,14 @@ export default function EncuestaScreen() {
       }
     }
     setLoading(false)
+  }
+
+  async function cargarEstadoCallejera() {
+    if (!asignacion) return
+    setLoadingP(true)
+    const { data } = await supabase.rpc('get_estado_encuesta_callejera', { p_asignacion_id: asignacion })
+    if (data) setEstadoCalle(data)
+    setLoadingP(false)
   }
 
   async function cargarProximaParcela(mostrarAvisoReemplazo = false) {
@@ -528,8 +603,14 @@ export default function EncuestaScreen() {
   // ── Continuar al siguiente después del fin ──
   async function continuarSiguiente() {
     setRespuestas({}); setRazonNR(''); setNoResponde(false)
-    setPaso(0); setOcultas(new Set()); setPantalla('mapa')
-    await cargarProximaParcela(true)
+    setPaso(0); setOcultas(new Set())
+    if (esCallejera) {
+      await cargarEstadoCallejera()
+      setPantalla('participa')
+    } else {
+      setPantalla('mapa')
+      await cargarProximaParcela(true)
+    }
   }
 
   // ══════════════════ RENDER ══════════════════
@@ -537,7 +618,31 @@ export default function EncuestaScreen() {
     <View style={s.centered}><ActivityIndicator size="large" color="#1a472a" /></View>
   )
 
-  // ── MAPA (navegación a la parcela) ──
+  // ── Para callejeras: redirigir directamente al flujo sin mapa ──
+  if (pantalla === 'mapa' && esCallejera) {
+    if (loadingP) return (
+      <View style={s.centered}><ActivityIndicator size="large" color="#1a472a" /></View>
+    )
+    // Cuota alcanzada
+    if (estadoCalle && !estadoCalle.puede_encuestar) return (
+      <View style={s.centered}>
+        <Text style={{ fontSize: 48, marginBottom: 16 }}>🎉</Text>
+        <Text style={s.finTitle}>¡Cuota alcanzada!</Text>
+        <Text style={s.finDesc}>{`Completaste ${estadoCalle.completadas} de ${estadoCalle.cuota} encuestas asignadas.`}</Text>
+        <TouchableOpacity style={s.btnComenzar} onPress={() => router.back()}>
+          <Text style={s.btnComenzarText}>← Volver al inicio</Text>
+        </TouchableOpacity>
+      </View>
+    )
+    // Puede seguir — ir directo a participa
+    if (estadoCalle?.puede_encuestar && pantalla === 'mapa') {
+      setPantalla('participa')
+      return <View style={s.centered}><ActivityIndicator size="large" color="#1a472a" /></View>
+    }
+    return <View style={s.centered}><ActivityIndicator size="large" color="#1a472a" /></View>
+  }
+
+  // ── MAPA (navegación a la parcela) — solo domiciliaria ──
   if (pantalla === 'mapa') {
     if (loadingP) return (
       <View style={s.centered}>
@@ -670,8 +775,18 @@ export default function EncuestaScreen() {
           ? 'La razón de no-respuesta fue registrada.'
           : 'Las respuestas fueron enviadas al panel central.'}
       </Text>
+      {esCallejera && estadoCalle && (
+        <View style={{ backgroundColor: '#d8f3dc', borderRadius: 12, padding: 14, marginBottom: 20, width: '100%' }}>
+          <Text style={{ fontSize: 15, fontWeight: '700', color: '#1a472a', textAlign: 'center' }}>
+            {`${estadoCalle.completadas + 1} de ${estadoCalle.cuota} encuestas`}
+          </Text>
+          <Text style={{ fontSize: 12, color: '#2d6a4f', textAlign: 'center', marginTop: 4 }}>
+            {estadoCalle.restantes - 1 > 0 ? `Quedan ${estadoCalle.restantes - 1} más` : '¡Cuota completada!'}
+          </Text>
+        </View>
+      )}
       <TouchableOpacity style={s.btnComenzar} onPress={continuarSiguiente}>
-        <Text style={s.btnComenzarText}>Siguiente parcela →</Text>
+        <Text style={s.btnComenzarText}>{esCallejera ? 'Siguiente encuesta →' : 'Siguiente parcela →'}</Text>
       </TouchableOpacity>
     </View>
   )
