@@ -145,6 +145,73 @@ function TarjetaPregunta({ pregunta, respuestas }: { pregunta: any; respuestas: 
       </View>
     )
   }
+
+  if (pregunta.tipo === 'matriz') {
+    const filasDef    = (pregunta.config_matriz?.filas    || []).map((f: any) => typeof f === 'string' ? f : f.texto)
+    const columnasDef = (pregunta.config_matriz?.columnas || []).map((c: any) => typeof c === 'string' ? c : c.texto)
+    // Contar respuestas por fila/columna
+    const conteo: Record<string, Record<string, number>> = {}
+    filasDef.forEach((f: string) => { conteo[f] = {}; columnasDef.forEach((c: string) => { conteo[f][c] = 0 }) })
+    respuestas.forEach(r => {
+      try {
+        const val = typeof r.valor_texto === 'string' ? JSON.parse(r.valor_texto) : r.valor_texto
+        if (val && typeof val === 'object') {
+          Object.entries(val).forEach(([fi, col]) => {
+            const filaTexto = isNaN(Number(fi)) ? fi : (filasDef[Number(fi)] || fi)
+            if (filaTexto && conteo[filaTexto] && columnasDef.includes(col as string)) {
+              conteo[filaTexto][col as string] = (conteo[filaTexto][col as string] || 0) + 1
+            }
+          })
+        }
+      } catch {}
+    })
+    if (!filasDef.length) return null
+    return (
+      <View style={s.pregCard}>
+        <Text style={s.pregTipo}>Matriz</Text>
+        <Text style={s.pregTexto} numberOfLines={2}>{pregunta.texto}</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 10 }}>
+          <View>
+            {/* Header */}
+            <View style={{ flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#e5e7eb', paddingBottom: 6, marginBottom: 4 }}>
+              <View style={{ width: 120 }} />
+              {columnasDef.map((col: string, ci: number) => (
+                <View key={ci} style={{ width: 64, alignItems: 'center' }}>
+                  <Text style={{ fontSize: 9, fontWeight: '700', color: '#6b7280', textAlign: 'center' }} numberOfLines={2}>{col}</Text>
+                </View>
+              ))}
+            </View>
+            {/* Filas */}
+            {filasDef.map((fila: string, fi: number) => {
+              const totalFila = columnasDef.reduce((s: number, c: string) => s + (conteo[fila]?.[c] || 0), 0)
+              const maxCol = columnasDef.reduce((max: string, c: string) =>
+                (conteo[fila]?.[c] || 0) > (conteo[fila]?.[max] || 0) ? c : max, columnasDef[0])
+              return (
+                <View key={fi} style={{ flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: '#f3f4f6', paddingVertical: 6 }}>
+                  <View style={{ width: 120 }}>
+                    <Text style={{ fontSize: 11, color: '#374151', fontWeight: '600' }} numberOfLines={2}>{fila}</Text>
+                  </View>
+                  {columnasDef.map((col: string, ci: number) => {
+                    const n = conteo[fila]?.[col] || 0
+                    const esMayor = col === maxCol && n > 0
+                    return (
+                      <View key={ci} style={{ width: 64, alignItems: 'center' }}>
+                        <Text style={{ fontSize: 14, fontWeight: '700', color: esMayor ? '#1a472a' : (n > 0 ? '#374151' : '#d1d5db') }}>{n}</Text>
+                        {n > 0 && totalFila > 0 && (
+                          <Text style={{ fontSize: 9, color: '#9ca3af' }}>{Math.round(n/totalFila*100)}%</Text>
+                        )}
+                      </View>
+                    )
+                  })}
+                </View>
+              )
+            })}
+          </View>
+        </ScrollView>
+        <Text style={s.pregCount}>{respuestas.length} respuestas</Text>
+      </View>
+    )
+  }
   return null
 }
 
@@ -279,7 +346,7 @@ export default function AdminDashboard() {
 
   async function fetchPreguntas(eId: string) {
     const { data } = await supabase.from('preguntas')
-      .select('id, texto, tipo, clave_base, orden')
+      .select('id, texto, tipo, clave_base, orden, config_matriz')
       .eq('encuesta_id', eId).order('orden')
     setPreguntas(data || [])
   }
