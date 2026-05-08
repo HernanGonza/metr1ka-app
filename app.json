@@ -42,7 +42,8 @@
     "plugins": [
       "expo-router",
       "expo-location",
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-updates"
     ],
     "extra": {
       "router": {},
@@ -50,6 +51,15 @@
         "projectId": "63f7f8cd-5597-4002-93d9-d30d3f3df5c2"
       }
     },
-    "owner": "paralelo"
+    "owner": "paralelo",
+    "updates": {
+      "url": "https://u.expo.dev/63f7f8cd-5597-4002-93d9-d30d3f3df5c2",
+      "enabled": true,
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    }
   }
 }

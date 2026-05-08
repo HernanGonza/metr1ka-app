@@ -904,10 +904,16 @@ export default function EncuestaScreen() {
   }
 
   // ── Detección de llegada a la parcela ──
+  const [gpsTimeout, setGpsTimeout] = useState(false)
+  useEffect(() => {
+    // Si después de 15 segundos no hay GPS, habilitar el botón igual
+    const t = setTimeout(() => setGpsTimeout(true), 15000)
+    return () => clearTimeout(t)
+  }, [])
+
   const enParcela = useMemo(() => {
-    // TEST: siempre true para pruebas sin GPS
-    if (!parcela?.punto_centroide) return true; // sin parcela cargada, mostrar botón igual
-    if (!ubicacion) return false; // Sin GPS = no puede encuestar  // sin GPS, mostrar botón igual
+    if (!parcela?.punto_centroide) return true
+    if (!ubicacion) return gpsTimeout // sin GPS: espera 15s, luego habilita igual
     const d = distanciaMetros(
       ubicacion.lat,
       ubicacion.lng,
@@ -915,7 +921,7 @@ export default function EncuestaScreen() {
       parcela.punto_centroide.lng,
     );
     return d <= RADIO_LLEGADA;
-  }, [ubicacion, parcela]);
+  }, [ubicacion, parcela, gpsTimeout]);
 
   // ── Preguntas ──
   const todasLasPreguntas = useMemo(
