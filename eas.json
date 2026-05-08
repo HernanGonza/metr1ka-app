@@ -18,10 +18,7 @@
       "android": {
         "buildType": "apk"
       },
-      "channel": "production",
-      "env": {
-        "GRADLE_OPTS": "-Dkotlin.version=2.0.21"
-      }
+      "channel": "production"
     }
   },
   "submit": {
