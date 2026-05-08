@@ -11,15 +11,12 @@
       "distribution": "internal",
       "android": {
         "buildType": "apk"
-      },
-      "channel": "preview"
+      }
     },
     "production": {
       "android": {
-        "buildType": "apk",
-        "image": "sdk-54"
-      },
-      "channel": "production"
+        "buildType": "apk"
+      }
     }
   },
   "submit": {
