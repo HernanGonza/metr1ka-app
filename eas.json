@@ -16,7 +16,8 @@
     },
     "production": {
       "android": {
-        "buildType": "apk"
+        "buildType": "apk",
+        "image": "sdk-54"
       },
       "channel": "production"
     }
