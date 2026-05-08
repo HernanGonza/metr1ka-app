@@ -43,7 +43,15 @@
       "expo-router",
       "expo-location",
       "expo-secure-store",
-      "expo-updates"
+      "expo-updates",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "kotlinVersion": "2.0.21"
+          }
+        }
+      ]
     ],
     "extra": {
       "router": {},
