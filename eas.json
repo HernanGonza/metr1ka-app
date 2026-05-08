@@ -23,15 +23,5 @@
   },
   "submit": {
     "production": {}
-  },
-  "update": {
-    "production": {
-      "channel": "production",
-      "distribution": "store"
-    },
-    "preview": {
-      "channel": "preview",
-      "distribution": "internal"
-    }
   }
 }
