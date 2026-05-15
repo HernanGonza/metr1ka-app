@@ -79,7 +79,7 @@ export default function Encuestas() {
         data={encuestas}
         keyExtractor={e => e.id}
         refreshControl={<RefreshControl refreshing={refresh} onRefresh={() => { setRefresh(true); cargar() }} tintColor="#1a472a" />}
-        contentContainerStyle={[s.lista, { paddingBottom: insets.bottom + 24 }]}
+        contentContainerStyle={[s.lista, { paddingBottom: insets.bottom + 80 }]}
         ListHeaderComponent={<Text style={s.titulo}>Encuestas</Text>}
         ListEmptyComponent={
           <View style={s.empty}>
@@ -89,10 +89,14 @@ export default function Encuestas() {
           </View>
         }
         renderItem={({ item }) => {
-          const color = TIPO_COLOR[item.tipo_encuesta] || '#1a472a'
+          const color      = TIPO_COLOR[item.tipo_encuesta] || '#1a472a'
           const completada = item.estado_produccion === 'completada'
           return (
-            <TouchableOpacity style={s.card} onPress={() => router.push(`/(admin)/encuesta/${item.id}`)} activeOpacity={0.75}>
+            <TouchableOpacity
+              style={s.card}
+              onPress={() => router.push(`/(admin)/encuesta/${item.id}`)}
+              activeOpacity={0.75}
+            >
               <View style={s.badgeRow}>
                 <View style={[s.badge, { backgroundColor: color + '18', borderColor: color + '44' }]}>
                   <Text style={[s.badgeText, { color }]}>{TIPO_LABEL[item.tipo_encuesta] || item.tipo_encuesta}</Text>
