@@ -22,6 +22,7 @@ import {
   Layer,
   MapaPlaceholder,
 } from "../../../components/MapaSeguro";
+import { MapaLeaflet } from "../../../components/MapaLeaflet";
 import Slider from "@react-native-community/slider";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -67,7 +68,257 @@ function evaluarCondicionales(pregunta: any, respuesta: any) {
   return cond.reglas[matches.findIndex(Boolean)] || null;
 }
 
-// ── Barra de progreso ─────────────────────────────────────────────
+// ── Mapa de zona para callejera ───────────────────────────────────
+function MapaZonaEncuestador({
+  zonaGeojson,
+  ubicacion,
+  estadoCalle,
+  onComenzar,
+  onSalir,
+  insets = { bottom: 0, top: 0, left: 0, right: 0 },
+}: {
+  zonaGeojson: any;
+  ubicacion: { lat: number; lng: number } | null;
+  estadoCalle: { puede_encuestar: boolean; completadas: number; no_respuesta: number; total: number; cuota: number; restantes: number; config: any } | null;
+  onComenzar: () => void;
+  onSalir: () => void;
+  insets?: { bottom: number; top: number; left: number; right: number };
+}) {
+  // Calcular centro de la zona
+  const centroZona = useMemo(() => {
+    if (!zonaGeojson?.features) return null;
+    const zonaFeats = zonaGeojson.features.filter((f: any) => f.properties?.tipo === 'zona');
+    if (!zonaFeats.length) return null;
+    // Centroide del primero
+    const ring = zonaFeats[0]?.geometry?.coordinates?.[0];
+    if (!ring?.length) return null;
+    const lng = ring.reduce((s: number, c: number[]) => s + c[0], 0) / ring.length;
+    const lat = ring.reduce((s: number, c: number[]) => s + c[1], 0) / ring.length;
+    return [lng, lat] as [number, number];
+  }, [zonaGeojson]);
+
+  // GeoJSON de TODOS los polígonos de zona
+  const zonaPolygon = useMemo(() => {
+    if (!zonaGeojson?.features) return null;
+    const feats = zonaGeojson.features.filter((f: any) => f.properties?.tipo === 'zona');
+    return feats.length > 0 ? { type: 'FeatureCollection', features: feats } : null;
+  }, [zonaGeojson]);
+
+  // GeoJSON de manzanas seleccionadas
+  const manzanasGeojson = useMemo(() => {
+    if (!zonaGeojson?.features) return null;
+    const feats = zonaGeojson.features.filter(
+      (f: any) => f.properties?.tipo === 'manzana' && f.properties?.seleccionada === true
+    );
+    return feats.length > 0 ? { type: 'FeatureCollection', features: feats } : null;
+  }, [zonaGeojson]);
+
+  const centro = ubicacion
+    ? [ubicacion.lng, ubicacion.lat] as [number, number]
+    : centroZona;
+
+  const progreso = estadoCalle && estadoCalle.cuota > 0
+    ? Math.round((estadoCalle.completadas / estadoCalle.cuota) * 100)
+    : 0;
+
+  return (
+    <View style={{ flex: 1, backgroundColor: '#f2f1ee' }}>
+      {/* Header */}
+      <View style={[mz.header, { paddingTop: insets.top + 12 }]}>
+        <View style={mz.headerRow}>
+          <TouchableOpacity onPress={onSalir} style={mz.backBtn}>
+            <Text style={mz.backBtnText}>← Salir</Text>
+          </TouchableOpacity>
+          {estadoCalle && (
+            <Text style={mz.statsText}>
+              {estadoCalle.completadas}/{estadoCalle.cuota} encuestas
+            </Text>
+          )}
+        </View>
+        <Text style={mz.headerTitle}>Tu zona asignada</Text>
+
+        {/* Stats: completadas / no respuesta / total */}
+        {estadoCalle && (
+          <View style={mz.statsRow}>
+            <View style={mz.statItem}>
+              <Text style={mz.statNum}>{estadoCalle.completadas}</Text>
+              <Text style={mz.statLabel}>Completadas</Text>
+            </View>
+            <View style={mz.statDiv} />
+            <View style={mz.statItem}>
+              <Text style={[mz.statNum, { color: '#fca5a5' }]}>{estadoCalle.no_respuesta}</Text>
+              <Text style={mz.statLabel}>No respuesta</Text>
+            </View>
+            <View style={mz.statDiv} />
+            <View style={mz.statItem}>
+              <Text style={mz.statNum}>{estadoCalle.total}</Text>
+              <Text style={mz.statLabel}>Total</Text>
+            </View>
+            <View style={mz.statDiv} />
+            <View style={mz.statItem}>
+              <Text style={[mz.statNum, { color: '#fcd34d' }]}>{estadoCalle.restantes}</Text>
+              <Text style={mz.statLabel}>Restantes</Text>
+            </View>
+          </View>
+        )}
+
+        {/* Barra de progreso */}
+        {estadoCalle && estadoCalle.cuota > 0 && (
+          <View style={mz.progRow}>
+            <View style={mz.progBar}>
+              <View style={[mz.progFill, { width: `${progreso}%` as any }]} />
+            </View>
+            <Text style={mz.progText}>{progreso}%</Text>
+          </View>
+        )}
+
+        {/* Config muestreo */}
+        {estadoCalle?.config && (
+          <View style={mz.configRow}>
+            {estadoCalle.config.cuota_por_encuestador && (
+              <View style={mz.configChip}>
+                <Text style={mz.configChipText}>🎯 Cuota: {estadoCalle.config.cuota_por_encuestador}</Text>
+              </View>
+            )}
+            {(estadoCalle.config.intervalo_salto || estadoCalle.config.salto_sistematico) && (
+              <View style={mz.configChip}>
+                <Text style={mz.configChipText}>↕ Salto: {estadoCalle.config.intervalo_salto || estadoCalle.config.salto_sistematico}</Text>
+              </View>
+            )}
+            {estadoCalle.config.inicio_aleatorio && (
+              <View style={mz.configChip}>
+                <Text style={mz.configChipText}>🎲 Inicio aleatorio</Text>
+              </View>
+            )}
+            {estadoCalle.config.sentido_recorrido && (
+              <View style={mz.configChip}>
+                <Text style={mz.configChipText}>🔄 {estadoCalle.config.sentido_recorrido}</Text>
+              </View>
+            )}
+          </View>
+        )}
+      </View>
+
+      {/* Mapa — MapLibre en build, Leaflet en Expo Go */}
+      <View style={{ flex: 1, position: 'relative' }}>
+        {!MapLibreDisponible ? (
+          <MapaLeaflet
+            zonaGeojson={zonaGeojson}
+            ubicacion={ubicacion}
+            colorZona="#1a472a"
+            style={{ flex: 1 }}
+          />
+        ) : (
+          <MLMap
+            style={{ flex: 1 }}
+            mapStyle="https://tiles.openfreemap.org/styles/liberty"
+            compass={false}
+            logo={false}
+            attribution={false}
+          >
+            <Camera
+              initialViewState={{
+                center: centro || [-55.8, -27.5] as [number, number],
+                zoom: centroZona ? 14 : 12,
+              }}
+            />
+
+            {/* GPS del encuestador con seguimiento */}
+            <UserLocation visible={true} />
+
+            {/* Polígono de la zona */}
+            {zonaPolygon && (
+              <GeoJSONSource id="zona-poligono" data={zonaPolygon as any}>
+                <Layer
+                  type="fill"
+                  id="zona-fill"
+                  paint={{
+                    'fill-color': '#1a472a',
+                    'fill-opacity': 0.12,
+                  }}
+                />
+                <Layer
+                  type="line"
+                  id="zona-border"
+                  paint={{
+                    'line-color': '#1a472a',
+                    'line-width': 2.5,
+                    'line-opacity': 0.8,
+                  }}
+                />
+              </GeoJSONSource>
+            )}
+
+            {/* Manzanas seleccionadas */}
+            {manzanasGeojson && (
+              <GeoJSONSource id="manzanas-sel" data={manzanasGeojson as any}>
+                <Layer
+                  type="fill"
+                  id="manzanas-fill"
+                  paint={{
+                    'fill-color': '#1a472a',
+                    'fill-opacity': 0.35,
+                  }}
+                />
+                <Layer
+                  type="line"
+                  id="manzanas-border"
+                  paint={{
+                    'line-color': '#1a472a',
+                    'line-width': 1.5,
+                  }}
+                />
+              </GeoJSONSource>
+            )}
+          </MLMap>
+        )}
+
+        {/* Botón comenzar flotante */}
+        {estadoCalle?.puede_encuestar && (
+          <TouchableOpacity
+            style={[mz.btnComenzar, { bottom: insets.bottom + 32 }]}
+            onPress={onComenzar}
+          >
+            <Text style={mz.btnComenzarText}>📋 Comenzar encuesta</Text>
+          </TouchableOpacity>
+        )}
+
+        {estadoCalle && !estadoCalle.puede_encuestar && (
+          <View style={[mz.cuotaWrap, { bottom: insets.bottom + 32 }]}>
+            <Text style={mz.cuotaText}>🎉 ¡Cuota alcanzada! {estadoCalle.completadas}/{estadoCalle.cuota}</Text>
+          </View>
+        )}
+      </View>
+    </View>
+  );
+}
+
+const mz = StyleSheet.create({
+  header:         { backgroundColor: '#1a472a', padding: 16, paddingBottom: 12 },
+  headerRow:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
+  backBtn:        { paddingVertical: 4, paddingHorizontal: 8 },
+  backBtnText:    { color: '#d8f3dc', fontSize: 14, fontWeight: '600' },
+  statsText:      { color: '#d8f3dc', fontSize: 13, fontWeight: '600' },
+  headerTitle:    { color: '#fff', fontSize: 18, fontWeight: '800', marginBottom: 10 },
+  statsRow:       { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: 10, padding: 10, marginBottom: 10 },
+  statItem:       { flex: 1, alignItems: 'center' },
+  statNum:        { color: '#fff', fontSize: 20, fontWeight: '800', fontFamily: 'System' },
+  statLabel:      { color: 'rgba(255,255,255,0.7)', fontSize: 10, fontWeight: '600', marginTop: 2 },
+  statDiv:        { width: 1, height: 32, backgroundColor: 'rgba(255,255,255,0.2)' },
+  progRow:        { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
+  progBar:        { flex: 1, height: 6, backgroundColor: 'rgba(255,255,255,0.3)', borderRadius: 3, overflow: 'hidden' },
+  progFill:       { height: 6, backgroundColor: '#74c69d', borderRadius: 3 },
+  progText:       { color: '#d8f3dc', fontSize: 12, fontWeight: '700', width: 36, textAlign: 'right' },
+  configRow:      { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  configChip:     { backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 100, paddingHorizontal: 10, paddingVertical: 4 },
+  configChipText: { color: '#d8f3dc', fontSize: 11, fontWeight: '600' },
+  btnComenzar:    { position: 'absolute', left: 20, right: 20, backgroundColor: '#1a472a', borderRadius: 14, paddingVertical: 16, alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 8, elevation: 5 },
+  btnComenzarText: { color: '#fff', fontSize: 16, fontWeight: '800' },
+  cuotaWrap:      { position: 'absolute', left: 20, right: 20, backgroundColor: '#374151', borderRadius: 14, paddingVertical: 14, alignItems: 'center' },
+  cuotaText:      { color: '#fff', fontSize: 14, fontWeight: '700' },
+});
+
+
 function ProgressBar({ current, total }: { current: number; total: number }) {
   const pct = total > 0 ? (current / total) * 100 : 0;
   return (
@@ -761,10 +1012,11 @@ type Pantalla =
   | "fin";
 
 export default function EncuestaScreen() {
-  const { id, asignacion, zona } = useLocalSearchParams<{
+  const { id, asignacion, zona, zonas: zonasParam } = useLocalSearchParams<{
     id: string;
     asignacion: string;
     zona: string;
+    zonas: string;
   }>();
   const { perfil } = useAuth();
   const insets = useSafeAreaInsets();
@@ -781,15 +1033,25 @@ export default function EncuestaScreen() {
   const [loading, setLoading] = useState(true);
   const esCallejera = encuesta?.tipo_encuesta === "callejera";
 
+  // Estado zona asignada
+  const [zonaGeojson, setZonaGeojson] = useState<any>(null);
+  // Todas las zonas asignadas (puede ser más de una)
+  const todasLasZonas = useMemo(() => {
+    try { return zonasParam ? JSON.parse(decodeURIComponent(zonasParam)) : [] }
+    catch { return [] }
+  }, [zonasParam]);
+
   // Navegación
   const [parcela, setParcela] = useState<any>(null); // próxima parcela
   const [loadingP, setLoadingP] = useState(false);
-  // Estado callejera
   const [estadoCalle, setEstadoCalle] = useState<{
     puede_encuestar: boolean;
     completadas: number;
+    no_respuesta: number;
+    total: number;
     cuota: number;
     restantes: number;
+    config: any;
   } | null>(null);
 
   // Estado de encuesta
@@ -874,6 +1136,29 @@ export default function EncuestaScreen() {
   async function cargarEstadoCallejera() {
     if (!asignacion) return;
     setLoadingP(true);
+
+    // Combinar geojson de todas las zonas asignadas
+    if (todasLasZonas.length > 0) {
+      const allFeatures: any[] = [];
+      todasLasZonas.forEach((z: any) => {
+        if (z.zona_geojson?.features) {
+          allFeatures.push(...z.zona_geojson.features);
+        }
+      });
+      if (allFeatures.length > 0) {
+        setZonaGeojson({ type: 'FeatureCollection', features: allFeatures });
+      }
+    } else if (zona) {
+      // Fallback: cargar zona individual
+      const { data: zonaData, error: zonaError } = await supabase
+        .from('encuesta_zonas')
+        .select('area_geojson')
+        .eq('id', zona)
+        .single();
+      if (zonaError) console.error('[zona geojson]', zonaError.message);
+      if (zonaData?.area_geojson) setZonaGeojson(zonaData.area_geojson);
+    }
+
     const { data } = await supabase.rpc("get_estado_encuesta_callejera", {
       p_asignacion_id: asignacion,
     });
@@ -1079,41 +1364,25 @@ export default function EncuestaScreen() {
       </View>
     );
 
-  // ── Para callejeras: redirigir directamente al flujo sin mapa ──
+  // ── Para callejeras: mostrar mapa con zona asignada ──
   if (pantalla === "mapa" && esCallejera) {
-    if (loadingP)
+    if (loadingP || !estadoCalle)
       return (
         <View style={s.centered}>
           <ActivityIndicator size="large" color="#1a472a" />
+          <Text style={{ marginTop: 12, color: "#666" }}>Cargando zona...</Text>
         </View>
       );
-    // Cuota alcanzada
-    if (estadoCalle && !estadoCalle.puede_encuestar)
-      return (
-        <View style={s.centered}>
-          <Text style={{ fontSize: 48, marginBottom: 16 }}>🎉</Text>
-          <Text style={s.finTitle}>¡Cuota alcanzada!</Text>
-          <Text
-            style={s.finDesc}
-          >{`Completaste ${estadoCalle.completadas} de ${estadoCalle.cuota} encuestas asignadas.`}</Text>
-          <TouchableOpacity style={s.btnComenzar} onPress={() => router.back()}>
-            <Text style={s.btnComenzarText}>← Volver al inicio</Text>
-          </TouchableOpacity>
-        </View>
-      );
-    // Puede seguir — ir directo a participa
-    if (estadoCalle?.puede_encuestar && pantalla === "mapa") {
-      setPantalla("participa");
-      return (
-        <View style={s.centered}>
-          <ActivityIndicator size="large" color="#1a472a" />
-        </View>
-      );
-    }
+
     return (
-      <View style={s.centered}>
-        <ActivityIndicator size="large" color="#1a472a" />
-      </View>
+      <MapaZonaEncuestador
+        zonaGeojson={zonaGeojson}
+        ubicacion={ubicacion}
+        estadoCalle={estadoCalle}
+        onComenzar={() => setPantalla(preguntaParticipa ? "participa" : "encuesta")}
+        onSalir={() => router.back()}
+        insets={insets}
+      />
     );
   }
 

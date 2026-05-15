@@ -9,6 +9,13 @@ import { supabase } from '../../lib/supabase'
 
 type EstadoEncuesta = 'disponible' | 'fuera_zona' | 'sin_gps' | 'sin_fecha' | 'cargando'
 
+type ZonaAsignada = {
+  asignacion_id: string
+  zona_id: string
+  zona_nombre: string
+  zona_geojson: any
+}
+
 type Encuesta = {
   id: string
   asignacion_id: string
@@ -21,6 +28,7 @@ type Encuesta = {
   fecha_fin: string | null
   geofencing_activo: boolean
   zona_nombre: string | null
+  todas_las_zonas: ZonaAsignada[] | null
 }
 
 function calcularEstado(
@@ -92,6 +100,15 @@ function EncuestaItem({
           {enc.descripcion}
         </Text>
       ) : null}
+      {enc.todas_las_zonas && enc.todas_las_zonas.length > 0 ? (
+        <View style={card.zonaBadge}>
+          <Text style={card.zonaText}>
+            📍 {enc.todas_las_zonas.length === 1
+              ? enc.todas_las_zonas[0].zona_nombre
+              : `${enc.todas_las_zonas.length} zonas asignadas`}
+          </Text>
+        </View>
+      ) : null}
       <EstadoBadge estado={estado} fechaInicio={enc.fecha_inicio} />
       {disponible && (
         <View style={card.footer}>
@@ -111,7 +128,8 @@ const card = StyleSheet.create({
   tipoBadge:    { backgroundColor: '#f3f4f6', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 100 },
   tipoText:     { fontSize: 10, fontWeight: '700', color: '#6b7280', textTransform: 'uppercase' },
   desc:         { fontSize: 13, color: '#6b7280', lineHeight: 18 },
-  footer:       { marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#f3f4f6' },
+  zonaBadge:    { flexDirection: 'row', alignItems: 'center', marginTop: 6, alignSelf: 'flex-start', backgroundColor: '#f0fdf4', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 100, borderWidth: 1, borderColor: '#bbf7d0' },
+  zonaText:     { fontSize: 11, fontWeight: '700', color: '#166534' },
   footerText:   { fontSize: 13, fontWeight: '700', color: '#1a472a' },
 })
 
@@ -196,7 +214,7 @@ export default function Home() {
     }
 
     // disponible
-    router.push(`/(encuestador)/encuesta/${enc.id}?asignacion=${enc.asignacion_id}&zona=${enc.zona_id}`)
+    router.push(`/(encuestador)/encuesta/${enc.id}?asignacion=${enc.asignacion_id}&zona=${enc.zona_id}&zonas=${encodeURIComponent(JSON.stringify(enc.todas_las_zonas || []))}`)
   }
 
   if (authLoading) return (
