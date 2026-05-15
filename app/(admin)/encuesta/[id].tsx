@@ -371,7 +371,8 @@ export default function EncuestaDetalle() {
     respuestasPorPregunta[r.pregunta_id].push(r)
   })
   const preguntasVisibles = preguntas.filter(p => !p.clave_base)
-  const totalSesiones = resultados?.total_sesiones ?? 0
+  const totalCompletadas  = resultados?.total_completadas ?? 0
+  const totalNoRespuesta  = resultados?.total_no_respuesta ?? 0
 
   if (loading) return (
     <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f2f1ee' }}>
@@ -408,13 +409,19 @@ export default function EncuestaDetalle() {
         {/* KPIs */}
         <View style={s.kpiRow}>
           <View style={[s.kpi, { backgroundColor: '#1a472a' }]}>
-            <Text style={[s.kpiVal, { color: '#fff' }]}>{totalSesiones}</Text>
-            <Text style={[s.kpiLabel, { color: '#b7e4c7' }]}>Total respuestas</Text>
+            <Text style={[s.kpiVal, { color: '#fff' }]}>{totalCompletadas}</Text>
+            <Text style={[s.kpiLabel, { color: '#b7e4c7' }]}>Completadas</Text>
           </View>
           <View style={[s.kpi, { backgroundColor: '#d8f3dc' }]}>
             <Text style={[s.kpiVal, { color: '#1a472a' }]}>{resultados?.total_hoy ?? 0}</Text>
             <Text style={[s.kpiLabel, { color: '#2d6a4f' }]}>Hoy</Text>
           </View>
+          {totalNoRespuesta > 0 && (
+            <View style={[s.kpi, { backgroundColor: '#fef3c7' }]}>
+              <Text style={[s.kpiVal, { color: '#b45309' }]}>{totalNoRespuesta}</Text>
+              <Text style={[s.kpiLabel, { color: '#92400e' }]}>No resp.</Text>
+            </View>
+          )}
         </View>
 
         {loadingRes ? (
@@ -432,7 +439,7 @@ export default function EncuestaDetalle() {
             </View>
 
             {/* Gráficos por pregunta — TODOS */}
-            {preguntasVisibles.length > 0 && totalSesiones > 0
+            {preguntasVisibles.length > 0 && totalCompletadas > 0
               ? preguntasVisibles.map(preg => (
                   <TarjetaPregunta key={preg.id} pregunta={preg} respuestas={respuestasPorPregunta[preg.id] || []} />
                 ))

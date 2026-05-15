@@ -16,7 +16,8 @@ type Encuesta = {
   estado_produccion: string
   tipo_encuesta: string
   creado_en: string
-  total_sesiones?: number
+  total_completadas?: number
+  total_no_respuesta?: number
   total_hoy?: number
 }
 
@@ -48,7 +49,7 @@ export default function Encuestas() {
           p_zona_id:        null,
           p_encuestador_id: null,
         })
-        return { ...enc, total_sesiones: stats?.total_sesiones ?? 0, total_hoy: stats?.total_hoy ?? 0 }
+        return { ...enc, total_completadas: stats?.total_completadas ?? 0, total_no_respuesta: stats?.total_no_respuesta ?? 0, total_hoy: stats?.total_hoy ?? 0 }
       })
     )
     setEnc(conStats)
@@ -111,8 +112,8 @@ export default function Encuestas() {
               {item.descripcion ? <Text style={s.desc} numberOfLines={2}>{item.descripcion}</Text> : null}
               <View style={s.statsRow}>
                 <View style={s.statItem}>
-                  <Text style={[s.statNum, { color: '#1a472a' }]}>{item.total_sesiones}</Text>
-                  <Text style={s.statLabel}>Respuestas</Text>
+                  <Text style={[s.statNum, { color: '#1a472a' }]}>{item.total_completadas}</Text>
+                  <Text style={s.statLabel}>Completadas</Text>
                 </View>
                 {!completada && (
                   <View style={s.statItem}>
