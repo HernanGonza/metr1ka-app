@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router'
-import { LayoutDashboard } from 'lucide-react-native'
+import { LayoutDashboard, ClipboardList } from 'lucide-react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 export default function AdminLayout() {
@@ -25,7 +25,14 @@ export default function AdminLayout() {
           tabBarIcon: ({ color, size }) => <LayoutDashboard size={size} color={color} strokeWidth={2} />,
         }}
       />
-      <Tabs.Screen name="encuestas" options={{ href: null }} />
+      <Tabs.Screen
+        name="encuestas"
+        options={{
+          title: 'Encuestas',
+          tabBarIcon: ({ color, size }) => <ClipboardList size={size} color={color} strokeWidth={2} />,
+        }}
+      />
+      <Tabs.Screen name="encuesta" options={{ href: null }} />
     </Tabs>
   )
 }
