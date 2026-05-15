@@ -214,6 +214,7 @@ export default function EncuestaDetalle() {
   }
 
   const [scrollEnabled, setScrollEnabled] = useState(true)
+  const mapaRef = useRef<View>(null)
 
   
   const encuestadores = personas.filter(p => !p.esCoordinador)
@@ -244,10 +245,11 @@ export default function EncuestaDetalle() {
 
           {/* Mapa */}
           <View
+            ref={mapaRef}
             style={s.mapaWrap}
-            onTouchStart={() => setScrollEnabled(false)}
-            onTouchEnd={() => setScrollEnabled(true)}
-            onTouchCancel={() => setScrollEnabled(true)}
+            onStartShouldSetResponder={() => { setScrollEnabled(false); return false; }}
+            onResponderRelease={() => setScrollEnabled(true)}
+            onResponderTerminate={() => setScrollEnabled(true)}
           >
             {!MapLibreDisponible ? (
               <MapaLeaflet

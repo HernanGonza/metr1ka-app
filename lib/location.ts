@@ -121,13 +121,20 @@ export function detenerTrackingSingleton() {
   }
 }
 
+let _errorCount = 0
+const MAX_ERRORS = 3
+
 async function _guardarUbicacion(
   encuestadorId: string,
   organizacionId: string,
   pos: { lat: number; lng: number }
 ) {
+  // Circuit breaker — si hay muchos errores seguidos, no seguir intentando
+  if (_errorCount >= MAX_ERRORS) {
+    return
+  }
   try {
-    await supabase.from('ubicaciones_encuestadores').upsert(
+    const { error } = await supabase.from('ubicaciones_encuestadores').upsert(
       {
         encuestador_id:  encuestadorId,
         organizacion_id: organizacionId,
@@ -137,7 +144,16 @@ async function _guardarUbicacion(
       },
       { onConflict: 'encuestador_id' }
     )
+    if (error) {
+      _errorCount++
+      if (_errorCount >= MAX_ERRORS) {
+        console.warn('[location] Demasiados errores guardando ubicación, pausando tracking de DB')
+      }
+    } else {
+      _errorCount = 0 // reset al tener éxito
+    }
   } catch (e) {
+    _errorCount++
     console.error('[location] error guardando:', e)
   }
 }

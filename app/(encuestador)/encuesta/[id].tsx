@@ -1012,12 +1012,15 @@ type Pantalla =
   | "fin";
 
 export default function EncuestaScreen() {
-  const { id, asignacion, zona, zonas: zonasParam } = useLocalSearchParams<{
+  const { id, asignacion: _asignacion, zona: _zona, zonas: zonasParam } = useLocalSearchParams<{
     id: string;
     asignacion: string;
     zona: string;
     zonas: string;
   }>();
+  // Params de URL siempre son strings — normalizar "null"/"undefined" a null real
+  const asignacion = (_asignacion && _asignacion !== 'null' && _asignacion !== 'undefined') ? _asignacion : null;
+  const zona       = (_zona && _zona !== 'null' && _zona !== 'undefined') ? _zona : null;
   const { perfil } = useAuth();
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -1094,7 +1097,7 @@ export default function EncuestaScreen() {
   // ── Carga inicial ──
   useEffect(() => {
     if (id && perfil?.organizacion_id) {
-      cargarEncuesta();
+      cargarEncuesta(asignacion);
     }
   }, [id, perfil?.organizacion_id]);
 
@@ -1107,10 +1110,10 @@ export default function EncuestaScreen() {
     }
   }, [encuesta?.id]);
 
-  async function cargarEncuesta() {
-    console.log('[cargarEncuesta] inicio — asignacion:', asignacion, 'id:', id);
+  async function cargarEncuesta(asignacionParam: string | null) {
+    console.log('[cargarEncuesta] inicio — asignacionParam:', asignacionParam, 'id:', id);
     // Bypass rápido para coordinador — solo necesita las preguntas
-    if (!asignacion) {
+    if (!asignacionParam) {
       console.log('[cargarEncuesta] modo coordinador — bypass rápido');
       const { data: encData, error: encError } = await supabase
         .from('encuestas')
@@ -1399,7 +1402,7 @@ export default function EncuestaScreen() {
     setOcultas(new Set());
     if (esCallejera) {
       await cargarEstadoCallejera();
-      setPantalla("participa");
+      setPantalla("mapa"); // volver al mapa, no a participa
     } else {
       setPantalla("mapa");
       await cargarProximaParcela(true);
@@ -1633,42 +1636,22 @@ export default function EncuestaScreen() {
           : "Las respuestas fueron enviadas al panel central."}
       </Text>
       {esCallejera && estadoCalle && (
-        <View
-          style={{
-            backgroundColor: "#d8f3dc",
-            borderRadius: 12,
-            padding: 14,
-            marginBottom: 20,
-            width: "100%",
-          }}
-        >
-          <Text
-            style={{
-              fontSize: 15,
-              fontWeight: "700",
-              color: "#1a472a",
-              textAlign: "center",
-            }}
-          >
-            {`${estadoCalle.completadas + 1} de ${estadoCalle.cuota} encuestas`}
+        <View style={{ backgroundColor: noResponde ? "#fef3c7" : "#d8f3dc", borderRadius: 12, padding: 14, marginBottom: 20, width: "100%" }}>
+          <Text style={{ fontSize: 15, fontWeight: "700", color: noResponde ? "#b45309" : "#1a472a", textAlign: "center" }}>
+            {noResponde
+              ? `${estadoCalle.completadas} de ${estadoCalle.cuota} encuestas completadas`
+              : `${estadoCalle.completadas + 1} de ${estadoCalle.cuota} encuestas`}
           </Text>
-          <Text
-            style={{
-              fontSize: 12,
-              color: "#2d6a4f",
-              textAlign: "center",
-              marginTop: 4,
-            }}
-          >
-            {estadoCalle.restantes - 1 > 0
-              ? `Quedan ${estadoCalle.restantes - 1} más`
-              : "¡Cuota completada!"}
+          <Text style={{ fontSize: 12, color: noResponde ? "#92400e" : "#2d6a4f", textAlign: "center", marginTop: 4 }}>
+            {noResponde
+              ? `No-respuesta registrada · Quedan ${estadoCalle.restantes} encuestas`
+              : estadoCalle.restantes - 1 > 0 ? `Quedan ${estadoCalle.restantes - 1} más` : "¡Cuota completada!"}
           </Text>
         </View>
       )}
       <TouchableOpacity style={s.btnComenzar} onPress={continuarSiguiente}>
         <Text style={s.btnComenzarText}>
-          {esCallejera ? "Siguiente encuesta →" : "Siguiente parcela →"}
+          {esCallejera ? "🗺️ Volver al mapa" : "Siguiente parcela →"}
         </Text>
       </TouchableOpacity>
     </View>
