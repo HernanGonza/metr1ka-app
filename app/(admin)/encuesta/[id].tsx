@@ -383,7 +383,8 @@ export default function EncuestaDetalle() {
 
   return (
     <View style={[s.page, { paddingTop: insets.top }]}>
-      {/* Header */}
+      <AppHeader nombre={perfil?.nombre_completo} rol={perfil?.rol} onSignOut={undefined} color="#1a472a" />
+      {/* Subheader volver */}
       <View style={s.header}>
         <TouchableOpacity onPress={() => router.back()}>
           <Text style={s.back}>← Volver</Text>
