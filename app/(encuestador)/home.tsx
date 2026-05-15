@@ -177,7 +177,7 @@ export default function Home() {
     setLoading(false)
   }
 
-  function handlePress(enc: Encuesta) {
+  async function handlePress(enc: Encuesta) {
     const estado = calcularEstado(enc, encuestaEnZona, ubicacion)
 
     if (estado === 'sin_fecha') {
@@ -214,7 +214,17 @@ export default function Home() {
     }
 
     // disponible
-    router.push(`/(encuestador)/encuesta/${enc.id}?asignacion=${enc.asignacion_id}&zona=${enc.zona_id}&zonas=${encodeURIComponent(JSON.stringify(enc.todas_las_zonas || []))}`)
+    let asignacionId = enc.asignacion_id
+
+    // Si es coordinador sin asignacion, crear una automáticamente
+    if (!asignacionId && perfil?.rol === 'coordinador') {
+      const { data: newAsig } = await supabase.rpc('get_o_crear_asignacion_coordinador', {
+        p_encuesta_id: enc.id,
+      })
+      asignacionId = newAsig || null
+    }
+
+    router.push(`/(encuestador)/encuesta/${enc.id}?asignacion=${asignacionId}&zona=${enc.zona_id}&zonas=${encodeURIComponent(JSON.stringify(enc.todas_las_zonas || []))}`)
   }
 
   if (authLoading) return (
