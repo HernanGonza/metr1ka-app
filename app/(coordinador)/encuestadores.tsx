@@ -49,7 +49,10 @@ export default function MiEquipo() {
       .then(({ data }) => {
         if (!data?.equipo_id) return
         equipoId = data.equipo_id
-        const canal = supabase.channel(`equipo-${equipoId}`)
+        const channelName = `equipo-${equipoId}`
+        supabase.removeChannel(supabase.channel(channelName))
+        const canal = supabase.channel(channelName)
+        canal
           .on('postgres_changes', {
             event: '*', schema: 'public', table: 'ubicaciones_encuestadores',
           }, payload => {

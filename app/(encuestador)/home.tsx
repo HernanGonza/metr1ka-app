@@ -239,6 +239,14 @@ export default function Home() {
         onSignOut={signOut}
         color="#1a472a"
       />
+      {perfil?.rol === 'coordinador' && (
+        <TouchableOpacity
+          style={s.modoCoorBtn}
+          onPress={() => router.replace('/(coordinador)/encuestas')}
+        >
+          <Text style={s.modoCoorText}>⭐ Volver a modo coordinador</Text>
+        </TouchableOpacity>
+      )}
 
       <FlatList
         data={encuestasOrdenadas}
@@ -277,12 +285,14 @@ export default function Home() {
 }
 
 const s = StyleSheet.create({
-  container:  { flex: 1, backgroundColor: '#f5f5f3' },
-  loading:    { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f5f5f3' },
-  list:       { padding: 20, gap: 0 },
-  secTitle:   { fontSize: 13, fontWeight: '700', color: '#6b7280', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 14 },
-  emptyWrap:  { alignItems: 'center', paddingTop: 60, gap: 10 },
-  emptyIcon:  { fontSize: 48, marginBottom: 4 },
-  emptyTitle: { fontSize: 18, fontWeight: '800', color: '#1a1a1a', textAlign: 'center' },
-  emptyText:  { fontSize: 14, color: '#6b7280', textAlign: 'center', lineHeight: 21 },
+  container:   { flex: 1, backgroundColor: '#f5f5f3' },
+  loading:     { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f5f5f3' },
+  list:        { padding: 20, gap: 0 },
+  secTitle:    { fontSize: 13, fontWeight: '700', color: '#6b7280', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 14 },
+  emptyWrap:   { alignItems: 'center', paddingTop: 60, gap: 10 },
+  emptyIcon:   { fontSize: 48, marginBottom: 4 },
+  emptyTitle:  { fontSize: 18, fontWeight: '800', color: '#1a1a1a', textAlign: 'center' },
+  emptyText:   { fontSize: 14, color: '#6b7280', textAlign: 'center', lineHeight: 21 },
+  modoCoorBtn: { backgroundColor: '#fef3c7', paddingVertical: 10, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: '#fcd34d', alignItems: 'center' },
+  modoCoorText:{ fontSize: 13, fontWeight: '700', color: '#b45309' },
 })

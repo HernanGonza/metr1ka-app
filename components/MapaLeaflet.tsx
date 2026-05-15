@@ -7,13 +7,14 @@ import { View, StyleSheet } from 'react-native'
 import { WebView } from 'react-native-webview'
 
 type Props = {
-  zonaGeojson?: any        // FeatureCollection con features tipo 'zona' y 'manzana'
+  zonaGeojson?: any
   ubicacion?: { lat: number; lng: number } | null
   colorZona?: string
   style?: any
+  markers?: Array<{ id: string; lat: number; lng: number; label: string; color: string }>
 }
 
-export function MapaLeaflet({ zonaGeojson, ubicacion, colorZona = '#1a472a', style }: Props) {
+export function MapaLeaflet({ zonaGeojson, ubicacion, colorZona = '#1a472a', style, markers = [] }: Props) {
   const webRef = useRef<any>(null)
 
   // Cuando cambia la ubicación, la mandamos al WebView
@@ -26,7 +27,7 @@ export function MapaLeaflet({ zonaGeojson, ubicacion, colorZona = '#1a472a', sty
     }))
   }, [ubicacion?.lat, ubicacion?.lng])
 
-  const html = buildHTML(zonaGeojson, ubicacion, colorZona)
+  const html = buildHTML(zonaGeojson, ubicacion, colorZona, markers)
 
   return (
     <View style={[s.container, style]}>
@@ -43,10 +44,12 @@ export function MapaLeaflet({ zonaGeojson, ubicacion, colorZona = '#1a472a', sty
   )
 }
 
-function buildHTML(zonaGeojson: any, ubicacion: any, colorZona: string) {
+function buildHTML(zonaGeojson: any, ubicacion: any, colorZona: string, markers: any[] = []) {
   const centro = getCentro(zonaGeojson, ubicacion)
   const geojsonStr = zonaGeojson ? JSON.stringify(zonaGeojson) : 'null'
   const ubicStr = ubicacion ? JSON.stringify(ubicacion) : 'null'
+
+  const markersStr = JSON.stringify(markers)
 
   return `<!DOCTYPE html>
 <html>
@@ -72,6 +75,7 @@ function buildHTML(zonaGeojson: any, ubicacion: any, colorZona: string) {
   var COLOR = '${colorZona}';
   var geojson = ${geojsonStr};
   var ubicacion = ${ubicStr};
+  var markers = ${markersStr};
 
   // Dibujar zona y manzanas
   if (geojson && geojson.features) {
@@ -111,6 +115,18 @@ function buildHTML(zonaGeojson: any, ubicacion: any, colorZona: string) {
   var userMarker = null;
   if (ubicacion) {
     userMarker = L.marker([ubicacion.lat, ubicacion.lng], { icon: userIcon }).addTo(map);
+  }
+
+  // Markers de personas (encuestadores/coordinadores)
+  if (markers && markers.length > 0) {
+    markers.forEach(function(m) {
+      var ic = L.divIcon({
+        className: '',
+        html: '<div style="width:28px;height:28px;border-radius:50%;background:' + m.color + ';color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:11px;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.4)">' + m.label + '</div>',
+        iconSize: [28,28], iconAnchor: [14,14]
+      });
+      L.marker([m.lat, m.lng], { icon: ic }).bindTooltip(m.label).addTo(map);
+    });
   }
 
   // Recibir actualizaciones de ubicación desde React Native

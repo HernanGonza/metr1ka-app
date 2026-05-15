@@ -1108,10 +1108,36 @@ export default function EncuestaScreen() {
   }, [encuesta?.id]);
 
   async function cargarEncuesta() {
+    console.log('[cargarEncuesta] inicio — asignacion:', asignacion, 'id:', id);
+    // Bypass rápido para coordinador — solo necesita las preguntas
+    if (!asignacion) {
+      console.log('[cargarEncuesta] modo coordinador — bypass rápido');
+      const { data: encData, error: encError } = await supabase
+        .from('encuestas')
+        .select('id, nombre, tipo_encuesta, estado_produccion, config_muestreo')
+        .eq('id', id)
+        .single();
+      console.log('[cargarEncuesta] encData:', encData?.nombre, 'error:', encError?.message);
+      if (encData) {
+        setEncuesta(encData as any);
+        const { data: pregData } = await supabase
+          .from('preguntas')
+          .select('*, opciones_pregunta(*)')
+          .eq('encuesta_id', id)
+          .order('orden');
+        console.log('[cargarEncuesta] preguntas:', pregData?.length);
+        setPreguntas(pregData || []);
+      }
+      setLoading(false);
+      console.log('[cargarEncuesta] loading=false (coordinador)');
+      return;
+    }
+
     const { data } = await supabase.rpc("get_encuesta_full", {
       p_encuesta_id: id,
       p_org_id: perfil?.organizacion_id,
     });
+    console.log('[cargarEncuesta] get_encuesta_full result:', data?.encuesta?.nombre, 'error:', data?.error);
     if (data && !data.error) {
       setEncuesta(data.encuesta);
       setPreguntas(data.preguntas || []);
@@ -1131,10 +1157,11 @@ export default function EncuestaScreen() {
       }
     }
     setLoading(false);
+    console.log('[cargarEncuesta] loading=false (encuestador)');
   }
 
   async function cargarEstadoCallejera() {
-    if (!asignacion) return;
+    console.log('[cargarEstadoCallejera] inicio — asignacion:', asignacion, 'todasLasZonas:', todasLasZonas.length);
     setLoadingP(true);
 
     // Combinar geojson de todas las zonas asignadas
@@ -1145,25 +1172,48 @@ export default function EncuestaScreen() {
           allFeatures.push(...z.zona_geojson.features);
         }
       });
+      console.log('[cargarEstadoCallejera] allFeatures combinadas:', allFeatures.length);
       if (allFeatures.length > 0) {
         setZonaGeojson({ type: 'FeatureCollection', features: allFeatures });
       }
     } else if (zona) {
-      // Fallback: cargar zona individual
+      console.log('[cargarEstadoCallejera] cargando zona individual:', zona);
       const { data: zonaData, error: zonaError } = await supabase
         .from('encuesta_zonas')
         .select('area_geojson')
         .eq('id', zona)
         .single();
-      if (zonaError) console.error('[zona geojson]', zonaError.message);
+      console.log('[cargarEstadoCallejera] zonaData features:', zonaData?.area_geojson?.features?.length, 'error:', zonaError?.message);
       if (zonaData?.area_geojson) setZonaGeojson(zonaData.area_geojson);
+    } else {
+      console.log('[cargarEstadoCallejera] sin zona ni todasLasZonas');
     }
 
+    // Sin asignacion (coordinador en modo encuestador) — mostrar mapa sin stats
+    if (!asignacion) {
+      console.log('[cargarEstadoCallejera] coordinador sin asignacion — setEstadoCalle default');
+      setEstadoCalle({
+        puede_encuestar: true,
+        completadas: 0,
+        no_respuesta: 0,
+        total: 0,
+        cuota: (encuesta as any)?.config_muestreo?.cuota_por_encuestador || 50,
+        restantes: (encuesta as any)?.config_muestreo?.cuota_por_encuestador || 50,
+        config: (encuesta as any)?.config_muestreo || {},
+      });
+      setLoadingP(false);
+      console.log('[cargarEstadoCallejera] loadingP=false (coordinador)');
+      return;
+    }
+
+    console.log('[cargarEstadoCallejera] llamando get_estado_encuesta_callejera con asignacion:', asignacion);
     const { data } = await supabase.rpc("get_estado_encuesta_callejera", {
       p_asignacion_id: asignacion,
     });
+    console.log('[cargarEstadoCallejera] resultado:', JSON.stringify(data));
     if (data) setEstadoCalle(data);
     setLoadingP(false);
+    console.log('[cargarEstadoCallejera] loadingP=false (encuestador)');
   }
 
   async function cargarProximaParcela(mostrarAvisoReemplazo = false) {
@@ -1366,6 +1416,7 @@ export default function EncuestaScreen() {
 
   // ── Para callejeras: mostrar mapa con zona asignada ──
   if (pantalla === "mapa" && esCallejera) {
+    console.log('[render] pantalla=mapa callejera — loadingP:', loadingP, 'estadoCalle:', !!estadoCalle, 'loading:', loading);
     if (loadingP || !estadoCalle)
       return (
         <View style={s.centered}>
