@@ -19,6 +19,13 @@ type Persona = {
   esCoordinador?: boolean
 }
 
+type StatsEnc = {
+  completadas: number
+  no_respuesta: number
+  total: number
+  cuota: number
+}
+
 type Zona = {
   id: string
   nombre: string
@@ -70,6 +77,7 @@ export default function EncuestaDetalle() {
 
   const [personas,        setPersonas]        = useState<Persona[]>([])
   const [zonas,           setZonas]           = useState<Zona[]>([])
+  const [statsEncs,       setStatsEncs]       = useState<Record<string, StatsEnc>>({})
   const [manzanasGeojson, setManzanasGeojson] = useState<any>(null)
   const [parcelasGeojson, setParcelasGeojson] = useState<any>(null)
   const [mapBounds,       setMapBounds]       = useState<{ center: [number, number]; zoom: number } | null>(null)
@@ -177,6 +185,17 @@ export default function EncuestaDetalle() {
     })
 
     setPersonas([...encuestadores, ...coordinadores])
+
+    // Cargar stats de cada encuestador
+    const { data: statsData } = await supabase.rpc('get_stats_encuestadores_por_encuesta', {
+      p_encuesta_id: encuestaId,
+      p_equipo_id:   equipoId || null,
+    })
+    if (statsData) {
+      const mapa: Record<string, StatsEnc> = {}
+      statsData.forEach((s: any) => { mapa[s.encuestador_id] = s })
+      setStatsEncs(mapa)
+    }
   }
 
   async function cargarManzanasYParcelas() {
@@ -213,10 +232,9 @@ export default function EncuestaDetalle() {
     }
   }
 
-  const [scrollEnabled, setScrollEnabled] = useState(true)
-  const mapaRef = useRef<View>(null)
+  const scrollRef = useRef<ScrollView>(null)
 
-  
+  const defaultCenter: [number, number] = mapBounds?.center || [-55.8974, -27.3671]
   const encuestadores = personas.filter(p => !p.esCoordinador)
   const coordinadores = personas.filter(p => p.esCoordinador)
   const activos = personas.filter(e => esActivo(e.actualizado_en))
@@ -239,18 +257,9 @@ export default function EncuestaDetalle() {
       {loading ? (
         <View style={s.center}><ActivityIndicator color="#0369a1" size="large" /></View>
       ) : (
-        <ScrollView
-          scrollEnabled={scrollEnabled}
-          contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}>
-
-          {/* Mapa */}
-          <View
-            ref={mapaRef}
-            style={s.mapaWrap}
-            onStartShouldSetResponder={() => { setScrollEnabled(false); return false; }}
-            onResponderRelease={() => setScrollEnabled(true)}
-            onResponderTerminate={() => setScrollEnabled(true)}
-          >
+        <View style={{ flex: 1 }}>
+          {/* Mapa FUERA del ScrollView — así no hay conflicto de gestos */}
+          <View style={s.mapaWrap}>
             {!MapLibreDisponible ? (
               <MapaLeaflet
                 zonaGeojson={zonasGeojsonCombinado}
@@ -379,9 +388,12 @@ export default function EncuestaDetalle() {
               ))}
               <Text style={[s.leyendaItem, { color: '#f59e0b' }]}>★ Coord</Text>
             </View>
-          </View>
+          </View>{/* fin mapaWrap */}
 
-          {/* Stats */}
+          {/* Todo el resto en ScrollView independiente */}
+          <ScrollView
+            ref={scrollRef}
+            contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}>
           <View style={s.statsRow}>
             {esDomiciliaria && (
               <>
@@ -414,6 +426,7 @@ export default function EncuestaDetalle() {
               const activo = esActivo(enc.actualizado_en)
               const mins   = calcMins(enc.actualizado_en)
               const color  = COLORES[i % COLORES.length]
+              const st     = statsEncs[enc.id]
               return (
                 <TouchableOpacity key={enc.id} style={s.encRow}
                   onPress={() => focusPersona(enc)} activeOpacity={0.7}>
@@ -427,6 +440,28 @@ export default function EncuestaDetalle() {
                     <Text style={[s.encEstado, { color: activo ? '#16a34a' : '#9ca3af' }]}>
                       {enc.lat ? (activo ? '● En campo ahora' : mins !== null ? `Última señal hace ${mins} min` : 'Sin señal') : 'Sin ubicación'}
                     </Text>
+                    {st && (
+                      <View style={s.encStats}>
+                        <View style={s.encStat}>
+                          <Text style={[s.encStatN, { color: '#1a472a' }]}>{st.completadas}</Text>
+                          <Text style={s.encStatL}>✓</Text>
+                        </View>
+                        <Text style={s.encStatSep}>/</Text>
+                        <View style={s.encStat}>
+                          <Text style={[s.encStatN, { color: '#b45309' }]}>{st.no_respuesta}</Text>
+                          <Text style={s.encStatL}>✗</Text>
+                        </View>
+                        <Text style={s.encStatSep}>/</Text>
+                        <View style={s.encStat}>
+                          <Text style={[s.encStatN, { color: '#374151' }]}>{st.total}</Text>
+                          <Text style={s.encStatL}>tot</Text>
+                        </View>
+                        <Text style={[s.encStatSep, { marginLeft: 6 }]}>cuota:</Text>
+                        <Text style={[s.encStatN, { color: st.completadas >= st.cuota ? '#16a34a' : '#374151' }]}>
+                          {st.completadas}/{st.cuota}
+                        </Text>
+                      </View>
+                    )}
                   </View>
                   {enc.lat && <Text style={{ fontSize: 16 }}>🎯</Text>}
                 </TouchableOpacity>
@@ -458,7 +493,8 @@ export default function EncuestaDetalle() {
               </>
             )}
           </View>
-        </ScrollView>
+          </ScrollView>
+        </View>
       )}
     </View>
   )
@@ -486,6 +522,11 @@ const s = StyleSheet.create({
   encAvatarText: { fontSize: 14, fontWeight: '700' },
   encNombre:     { fontSize: 14, fontWeight: '600', color: '#111827' },
   encEstado:     { fontSize: 12, marginTop: 2 },
+  encStats:      { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 5 },
+  encStat:       { flexDirection: 'row', alignItems: 'baseline', gap: 2 },
+  encStatN:      { fontSize: 13, fontWeight: '800' },
+  encStatL:      { fontSize: 10, color: '#9ca3af' },
+  encStatSep:    { fontSize: 11, color: '#d1d5db' },
   marker:        { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#fff', elevation: 3 },
   markerCoord:   { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', borderWidth: 2.5, borderColor: '#fff', elevation: 4 },
   markerText:    { fontSize: 11, fontWeight: '700', color: '#fff' },
