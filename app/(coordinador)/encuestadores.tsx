@@ -1,5 +1,7 @@
-import { useState, useEffect } from 'react'
-import { View, Text, FlatList, StyleSheet, ActivityIndicator, RefreshControl } from 'react-native'
+import { useState, useEffect, useRef } from 'react'
+import { View, Text, FlatList, StyleSheet, ActivityIndicator, RefreshControl, TouchableOpacity } from 'react-native'
+import type { CameraRef } from '@maplibre/maplibre-react-native'
+import { MapLibreDisponible, MLMap, Camera, Marker, MapaPlaceholder } from '../../components/MapaSeguro'
 import { supabase } from '../../lib/supabase'
 import { AppHeader } from '../../components/UI/AppHeader'
 import { useAuth } from '../../lib/auth'
@@ -29,6 +31,10 @@ export default function MiEquipo() {
   const [loading, setLoading]  = useState(true)
   const [refresh, setRefresh]  = useState(false)
   const [equipoNombre, setEquipoNombre] = useState('')
+  const [equipoId,     setEquipoId]     = useState<string | null>(null)
+  const [encFiltrado,  setEncFiltrado]  = useState<string | null>(null)
+  const cameraRef = useRef<CameraRef>(null)
+  const COLORES = ['#0369a1', '#7c3aed', '#b45309', '#059669', '#dc2626', '#0891b2']
 
   useEffect(() => {
     if (!perfil?.id) return
@@ -85,6 +91,7 @@ export default function MiEquipo() {
     const eq = equiposCoord[0].equipos as any
     setEquipoNombre(eq?.nombre || '')
     const equipoId = equiposCoord[0].equipo_id
+    setEquipoId(equipoId)
 
     // Miembros del equipo
     const { data: miembros } = await supabase
@@ -131,6 +138,13 @@ export default function MiEquipo() {
     setRefresh(false)
   }
 
+  function focusMapa(enc: Encuestador) {
+    if (enc.lat && enc.lng && cameraRef.current) {
+      cameraRef.current.easeTo({ center: [enc.lng, enc.lat], zoom: 17, duration: 500 })
+    }
+    setEncFiltrado(prev => prev === enc.id ? null : enc.id)
+  }
+
   const activos   = encuestadores.filter(e => esActivo(e.actualizado_en))
   const inactivos = encuestadores.filter(e => !esActivo(e.actualizado_en))
 
@@ -147,7 +161,56 @@ export default function MiEquipo() {
       {loading ? (
         <View style={s.center}><ActivityIndicator color="#1a472a" size="large" /></View>
       ) : (
-        <FlatList
+        <View style={{ flex: 1 }}>
+          {/* Mapa en tiempo real */}
+          <View style={{ height: 240, position: 'relative' }}>
+            {!MapLibreDisponible ? (
+              <MapaPlaceholder mensaje="Mapa disponible en app compilada" />
+            ) : (
+              <MLMap style={{ flex: 1 }} mapStyle="https://tiles.openfreemap.org/styles/liberty"
+                compass={false} logo={false} attribution={false}>
+                <Camera ref={cameraRef} initialViewState={{ center: [-55.8974, -27.3671], zoom: 13 }} />
+                {encuestadores.map((enc, i) => {
+                  if (!enc.lat || !enc.lng) return null
+                  const activo = esActivo(enc.actualizado_en)
+                  const filtrado = encFiltrado === enc.id
+                  return (
+                    <Marker key={enc.id} id={`enc-${enc.id}`}
+                      lngLat={[enc.lng, enc.lat] as [number, number]}
+                      onPress={() => focusMapa(enc)}>
+                      <View style={{
+                        width: filtrado ? 36 : 28, height: filtrado ? 36 : 28,
+                        borderRadius: filtrado ? 18 : 14,
+                        backgroundColor: activo ? COLORES[i % COLORES.length] : '#9ca3af',
+                        alignItems: 'center', justifyContent: 'center',
+                        borderWidth: filtrado ? 3 : 2, borderColor: '#fff',
+                        opacity: encFiltrado && !filtrado ? 0.3 : 1,
+                        elevation: filtrado ? 6 : 3,
+                      }}>
+                        <Text style={{ fontSize: 11, fontWeight: '700', color: '#fff' }}>
+                          {enc.nombre_completo[0]?.toUpperCase()}
+                        </Text>
+                      </View>
+                    </Marker>
+                  )
+                })}
+              </MLMap>
+            )}
+            {encFiltrado && (() => {
+              const enc = encuestadores.find(e => e.id === encFiltrado)
+              if (!enc) return null
+              return (
+                <TouchableOpacity
+                  style={{ position: 'absolute', bottom: 8, left: 12, right: 12, backgroundColor: '#1a472a', borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}
+                  onPress={() => setEncFiltrado(null)}>
+                  <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>👤 {enc.nombre_completo}</Text>
+                  <Text style={{ color: '#a7f3d0', fontSize: 12 }}>✕ Ver todos</Text>
+                </TouchableOpacity>
+              )
+            })()}
+          </View>
+
+          <FlatList
           data={encuestadores}
           keyExtractor={e => e.id}
           contentContainerStyle={{ padding: 16, gap: 10, paddingBottom: 32 }}
@@ -213,6 +276,7 @@ export default function MiEquipo() {
             </View>
           }
         />
+        </View>
       )}
     </View>
   )

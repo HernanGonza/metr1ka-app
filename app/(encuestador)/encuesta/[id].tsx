@@ -28,6 +28,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { supabase } from "../../../lib/supabase";
 import { useAuth } from "../../../lib/auth";
+import { encolarRespuesta, sincronizarCola, cantidadPendiente } from "../../../lib/offlineQueue";
 import { useGeofencing } from "../../../hooks/useGeofencing";
 
 // ── Utilidades ───────────────────────────────────────────────────
@@ -1065,6 +1066,7 @@ export default function EncuestaScreen() {
   const [ocultas, setOcultas] = useState(new Set<string>());
   const [saving, setSaving] = useState(false);
   const [noResponde, setNoResponde] = useState(false);
+  const [pendientesOffline, setPendientesOffline] = useState(0);
 
   // ── BackHandler — interceptar botón físico de atrás ──
   // usamos ref para que el listener siempre lea el valor actual de pantalla
@@ -1308,12 +1310,11 @@ export default function EncuestaScreen() {
     else guardarYFinalizar();
   }
 
-  // ── Guardar respuestas ──
+  // ── Guardar respuestas (offline-first) ──
   async function guardarYFinalizar(razon?: string) {
     setSaving(true);
     try {
       const filas = Object.entries(respuestas).map(([pregunta_id, valor]) => {
-        // valor puede ser: string (si_no/texto), number (escala), boolean, o {opcionId, texto} (opcion_multiple)
         const esOpcion =
           valor !== null && typeof valor === "object" && "opcionId" in valor;
         const esMatriz =
@@ -1342,36 +1343,56 @@ export default function EncuestaScreen() {
         });
       }
 
-      const { data: sesionId, error } = await supabase.rpc(
-        "guardar_encuesta_completa",
-        {
-          p_asignacion_id: asignacion,
-          p_latitud: ubicacion?.lat ?? null,
-          p_longitud: ubicacion?.lng ?? null,
-          p_respuestas: filas,
-          p_razon_no_respuesta: razon || null,
-          p_participa_pregunta_id: preguntaParticipa?.id || null,
-        },
-      );
-      if (error) throw new Error(error.message || JSON.stringify(error));
-      if (!sesionId)
-        throw new Error("No se recibió ID de sesión — verificá la asignación");
+      // ── Intentar enviar directo ──
+      let enviado = false;
+      try {
+        const { data: sesionId, error } = await supabase.rpc(
+          "guardar_encuesta_completa",
+          {
+            p_asignacion_id: asignacion,
+            p_latitud: ubicacion?.lat ?? null,
+            p_longitud: ubicacion?.lng ?? null,
+            p_respuestas: filas,
+            p_razon_no_respuesta: razon || null,
+            p_participa_pregunta_id: preguntaParticipa?.id || null,
+          },
+        );
+        if (!error && sesionId) {
+          if (parcela?.parcela_id) {
+            await supabase.rpc("registrar_visita", {
+              p_parcela_id: parcela.parcela_id,
+              p_resultado: razon ? "no_responde" : "completada",
+              p_latitud: ubicacion?.lat ?? null,
+              p_longitud: ubicacion?.lng ?? null,
+              p_sesion_id: sesionId,
+            });
+          }
+          enviado = true;
+        }
+      } catch {}
 
-      // Registrar visita como completada
-      if (parcela?.parcela_id) {
-        await supabase.rpc("registrar_visita", {
-          p_parcela_id: parcela.parcela_id,
-          p_resultado: "completada",
-          p_latitud: ubicacion?.lat ?? null,
-          p_longitud: ubicacion?.lng ?? null,
-          p_sesion_id: sesionId,
+      // ── Sin conexión: guardar en cola local y avanzar igual ──
+      if (!enviado) {
+        await encolarRespuesta({
+          asignacion_id: asignacion,
+          latitud: ubicacion?.lat ?? null,
+          longitud: ubicacion?.lng ?? null,
+          respuestas: filas,
+          razon_no_respuesta: razon || null,
+          participa_pregunta_id: preguntaParticipa?.id || null,
+          parcela_id: parcela?.parcela_id || null,
         });
+        // Intentar sync en background
+        sincronizarCola().catch(() => {});
       }
 
+      // ── Siempre avanzar, sin importar si hubo conexión ──
       setNoResponde(!!razon);
       setPantalla("fin");
+      // Actualizar contador de pendientes
+      cantidadPendiente().then(setPendientesOffline);
     } catch (err: any) {
-      Alert.alert("Error", err?.message || "No se pudo guardar la encuesta");
+      Alert.alert("Error inesperado", err?.message || "No se pudo guardar");
     } finally {
       setSaving(false);
     }
@@ -1629,6 +1650,14 @@ export default function EncuestaScreen() {
             {noResponde
               ? `No-respuesta registrada · Quedan ${estadoCalle.restantes} encuestas`
               : estadoCalle.restantes - 1 > 0 ? `Quedan ${estadoCalle.restantes - 1} más` : "¡Cuota completada!"}
+          </Text>
+        </View>
+      )}
+      {pendientesOffline > 0 && (
+        <View style={{ backgroundColor: "#fef3c7", borderRadius: 12, padding: 12, marginBottom: 16, width: "100%", flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <Text style={{ fontSize: 16 }}>📶</Text>
+          <Text style={{ fontSize: 13, color: "#92400e", fontWeight: "600", flex: 1 }}>
+            {pendientesOffline} encuesta{pendientesOffline > 1 ? "s" : ""} guardada{pendientesOffline > 1 ? "s" : ""} sin conexión — se enviarán automáticamente
           </Text>
         </View>
       )}

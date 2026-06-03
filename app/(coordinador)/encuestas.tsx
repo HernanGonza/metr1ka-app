@@ -52,6 +52,7 @@ export default function EncuestasCoordinador() {
   }, [perfil?.id])
 
   async function cargar() {
+    // 1. Equipos del coordinador
     const { data: equiposCoord } = await supabase
       .from('equipo_coordinadores')
       .select('equipo_id, equipos(id, nombre)')
@@ -66,27 +67,45 @@ export default function EncuestasCoordinador() {
       if (eq) equipoNombres[eq.id] = eq.nombre
     })
 
+    // 2. IDs de encuestas via encuestas_equipo
     const { data: encsEquipo } = await supabase
       .from('encuestas_equipo')
-      .select('equipo_id, encuesta_id, encuestas(id, nombre, descripcion, estado_produccion, tipo_encuesta, fecha_inicio, fecha_fin)')
+      .select('equipo_id, encuesta_id')
       .in('equipo_id', equipoIds)
 
-    const lista: Encuesta[] = (encsEquipo || []).map(ee => {
-      const enc = Array.isArray(ee.encuestas) ? ee.encuestas[0] : ee.encuestas as any
-      return {
-        id:                enc?.id,
-        nombre:            enc?.nombre || '—',
-        descripcion:       enc?.descripcion || null,
-        estado_produccion: enc?.estado_produccion || 'pendiente',
-        tipo_encuesta:     enc?.tipo_encuesta || 'domiciliaria',
-        fecha_inicio:      enc?.fecha_inicio || null,
-        fecha_fin:         enc?.fecha_fin || null,
-        equipo_id:         ee.equipo_id,
-        equipo_nombre:     equipoNombres[ee.equipo_id] || '—',
-      }
-    }).filter(e => e.id)
+    // 3. IDs de encuestas via encuesta_zonas (para encuestas nuevas sin encuestas_equipo)
+    const { data: zonasEquipo } = await supabase
+      .from('encuesta_zonas')
+      .select('equipo_id, encuesta_id')
+      .in('equipo_id', equipoIds)
 
-    // Ordenar: activas primero, luego próximas, luego finalizadas
+    // Unir ambas fuentes de IDs sin duplicados
+    const encuestasMap: Record<string, string> = {} // encuesta_id -> equipo_id
+    ;(encsEquipo || []).forEach(ee => { encuestasMap[ee.encuesta_id] = ee.equipo_id })
+    ;(zonasEquipo || []).forEach(ez => { if (!encuestasMap[ez.encuesta_id]) encuestasMap[ez.encuesta_id] = ez.equipo_id })
+
+    const encuestaIds = Object.keys(encuestasMap)
+    if (!encuestaIds.length) { setEncuestas([]); setLoading(false); setRefresh(false); return }
+
+    // 4. Traer datos completos de las encuestas directamente
+    const { data: encs } = await supabase
+      .from('encuestas')
+      .select('id, nombre, descripcion, estado_produccion, tipo_encuesta, fecha_inicio, fecha_fin')
+      .in('id', encuestaIds)
+      .in('estado_produccion', ['publicada', 'en_proceso', 'pendiente'])
+
+    const lista: Encuesta[] = (encs || []).map(enc => ({
+      id:                enc.id,
+      nombre:            enc.nombre || '—',
+      descripcion:       enc.descripcion || null,
+      estado_produccion: enc.estado_produccion || 'pendiente',
+      tipo_encuesta:     enc.tipo_encuesta || 'domiciliaria',
+      fecha_inicio:      enc.fecha_inicio || null,
+      fecha_fin:         enc.fecha_fin || null,
+      equipo_id:         encuestasMap[enc.id],
+      equipo_nombre:     equipoNombres[encuestasMap[enc.id]] || '—',
+    }))
+
     const orden: Record<EstadoVista, number> = { activa: 0, proxima: 1, otro: 2, finalizada: 3 }
     lista.sort((a, b) => orden[calcularEstadoVista(a)] - orden[calcularEstadoVista(b)])
 

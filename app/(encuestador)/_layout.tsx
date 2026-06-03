@@ -6,9 +6,8 @@ import {
   iniciarTrackingSingleton,
   detenerTrackingSingleton,
 } from '../../lib/location'
+import { iniciarSyncAutomatico } from '../../lib/offlineQueue'
 
-// El layout solo inicia el singleton de tracking
-// home.tsx es el único que llama useGeofencing y evalúa zonas por encuesta
 export default function EncuestadorLayout() {
   const { perfil } = useAuth()
 
@@ -24,6 +23,12 @@ export default function EncuestadorLayout() {
 
     return () => { detenerTrackingSingleton() }
   }, [perfil?.id, perfil?.organizacion_id])
+
+  // Sincronizar cola offline cuando la app vuelve al frente
+  useEffect(() => {
+    const unsub = iniciarSyncAutomatico()
+    return unsub
+  }, [])
 
   return <Stack screenOptions={{ headerShown: false }} />
 }

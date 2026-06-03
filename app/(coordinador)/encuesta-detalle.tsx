@@ -82,6 +82,7 @@ export default function EncuestaDetalle() {
   const [parcelasGeojson, setParcelasGeojson] = useState<any>(null)
   const [mapBounds,       setMapBounds]       = useState<{ center: [number, number]; zoom: number } | null>(null)
   const [loading,         setLoading]         = useState(true)
+  const [encFiltrado,     setEncFiltrado]     = useState<string | null>(null)
   const [stats,           setStats]           = useState({ manzanas: 0, manzanasOk: 0, parcelas: 0, parcelasOk: 0 })
 
   // GeoJSON combinado de todas las zonas para MapaLeaflet
@@ -230,12 +231,21 @@ export default function EncuestaDetalle() {
     if (p.lat && p.lng && cameraRef.current) {
       cameraRef.current.easeTo({ center: [p.lng, p.lat], zoom: 17, duration: 500 })
     }
+    setEncFiltrado(prev => prev === p.id ? null : p.id)
   }
 
   const scrollRef = useRef<ScrollView>(null)
 
   const defaultCenter: [number, number] = mapBounds?.center || [-55.8974, -27.3671]
   const encuestadores = personas.filter(p => !p.esCoordinador)
+  // Si hay filtro activo, mostrar solo ese encuestador y su zona
+  const personasVisibles = encFiltrado
+    ? personas.filter(p => p.id === encFiltrado || p.esCoordinador)
+    : personas
+  // Zona del encuestador filtrado: la que tiene asignación con ese encuestador
+  const zonasVisibles = encFiltrado
+    ? zonas  // simplificado: mostramos todas las zonas pero destacamos la del filtrado
+    : zonas
   const coordinadores = personas.filter(p => p.esCoordinador)
   const activos = personas.filter(e => esActivo(e.actualizado_en))
   const pctM = stats.manzanas > 0 ? Math.round(stats.manzanasOk / stats.manzanas * 100) : 0
@@ -349,13 +359,14 @@ export default function EncuestaDetalle() {
 
                 {/* Encuestadores — círculo de color */}
                 {encuestadores.map((enc, i) => {
+                  const visible = !encFiltrado || enc.id === encFiltrado
                   if (!enc.lat || !enc.lng) return null
                   const activo = esActivo(enc.actualizado_en)
                   return (
                     <Marker key={enc.id} id={`enc-${enc.id}`}
                       lngLat={[enc.lng, enc.lat] as [number, number]}
                       onPress={() => focusPersona(enc)}>
-                      <View style={[s.marker, { backgroundColor: activo ? COLORES[i % COLORES.length] : '#9ca3af' }]}>
+                      <View style={[s.marker, { backgroundColor: activo ? COLORES[i % COLORES.length] : '#9ca3af', opacity: encFiltrado && enc.id !== encFiltrado ? 0.25 : 1 }]}>
                         <Text style={s.markerText}>{enc.nombre[0]?.toUpperCase()}</Text>
                       </View>
                     </Marker>
@@ -379,6 +390,20 @@ export default function EncuestaDetalle() {
               </MLMap>
             )}
 
+            {/* Badge filtro activo */}
+            {encFiltrado && (() => {
+              const enc = encuestadores.find(e => e.id === encFiltrado)
+              if (!enc) return null
+              return (
+                <TouchableOpacity
+                  style={{ position: 'absolute', top: 8, left: 0, right: 0, marginHorizontal: 16, backgroundColor: '#1a472a', borderRadius: 10, padding: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', zIndex: 10 }}
+                  onPress={() => setEncFiltrado(null)}
+                >
+                  <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>👤 {enc.nombre}</Text>
+                  <Text style={{ color: '#a7f3d0', fontSize: 12, fontWeight: '600' }}>✕ Ver todos</Text>
+                </TouchableOpacity>
+              )
+            })()}
             {/* Leyenda */}
             <View style={s.leyenda}>
               {zonas.map((z, zi) => (
@@ -428,7 +453,7 @@ export default function EncuestaDetalle() {
               const color  = COLORES[i % COLORES.length]
               const st     = statsEncs[enc.id]
               return (
-                <TouchableOpacity key={enc.id} style={s.encRow}
+                <TouchableOpacity key={enc.id} style={[s.encRow, encFiltrado === enc.id && { borderColor: '#1a472a', borderWidth: 2, backgroundColor: '#f0fdf4' }]}
                   onPress={() => focusPersona(enc)} activeOpacity={0.7}>
                   <View style={[s.encAvatar, { backgroundColor: activo ? color + '22' : '#f3f4f6' }]}>
                     <Text style={[s.encAvatarText, { color: activo ? color : '#9ca3af' }]}>

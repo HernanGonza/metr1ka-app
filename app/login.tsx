@@ -102,7 +102,6 @@ export default function Login() {
   const [email,         setEmail]         = useState('')
   const [password,      setPassword]      = useState('')
   const [loading,       setLoading]       = useState(false)
-  const [googleLoading, setGoogleLoading] = useState(false)
   const [error,         setError]         = useState<{ titulo: string; mensaje: string; mostrarRecuperar: boolean } | null>(null)
   const [recuperando,   setRecuperando]   = useState(false)
   const [emailEnviado,  setEmailEnviado]  = useState(false)
@@ -119,16 +118,6 @@ export default function Login() {
     setLoading(false)
   }
 
-  async function handleGoogle() {
-    setGoogleLoading(true)
-    const { data, error: err } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: { redirectTo: 'metr1ka://login', skipBrowserRedirect: true }
-    })
-    if (err) { setError(traducirError(err.message)); setGoogleLoading(false); return }
-    if (data?.url) await Linking.openURL(data.url)
-    setGoogleLoading(false)
-  }
 
   async function handleRecuperar() {
     setError(null)
@@ -195,19 +184,6 @@ export default function Login() {
           <View style={s.card}>
             <Text style={s.cardTitle}>Bienvenido</Text>
 
-            {/* Google */}
-            <TouchableOpacity style={[s.btnGoogle, googleLoading && s.btnDisabled]}
-              onPress={handleGoogle} disabled={googleLoading} activeOpacity={0.85}>
-              <Text style={s.googleG}>G</Text>
-              <Text style={s.btnGoogleText}>{googleLoading ? 'Conectando...' : 'Continuar con Google'}</Text>
-            </TouchableOpacity>
-
-            <View style={s.divider}>
-              <View style={s.dividerLine} />
-              <Text style={s.dividerText}>o ingresá con email</Text>
-              <View style={s.dividerLine} />
-            </View>
-
             <View style={s.field}>
               <Text style={s.label}>Email</Text>
               <TextInput style={s.input} placeholder="tu@email.com" placeholderTextColor="#9ca3af"
@@ -245,12 +221,6 @@ const s = StyleSheet.create({
   cardTitle:     { fontSize: 18, fontWeight: '800', color: '#0f0f0f', letterSpacing: -0.4 },
   cardSub:       { fontSize: 13, color: '#6b7280', lineHeight: 19, marginTop: -6 },
   successIcon:   { alignSelf: 'center', width: 56, height: 56, borderRadius: 28, backgroundColor: '#f0fdf4', alignItems: 'center', justifyContent: 'center' },
-  btnGoogle:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: '#fff', borderRadius: 12, borderWidth: 1.5, borderColor: '#e5e7eb', padding: 13 },
-  googleG:       { fontSize: 15, fontWeight: '900', color: '#4285F4', width: 22, textAlign: 'center' },
-  btnGoogleText: { fontSize: 14, fontWeight: '600', color: '#374151' },
-  divider:       { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  dividerLine:   { flex: 1, height: 1, backgroundColor: '#e5e7eb' },
-  dividerText:   { fontSize: 11, color: '#9ca3af', fontWeight: '500' },
   field:         { gap: 6 },
   label:         { fontSize: 11, fontWeight: '700', color: '#374151', textTransform: 'uppercase', letterSpacing: 0.5 },
   input:         { backgroundColor: '#f9fafb', borderRadius: 12, borderWidth: 1.5, borderColor: '#e5e7eb', padding: 13, fontSize: 15, color: '#0f0f0f' },
