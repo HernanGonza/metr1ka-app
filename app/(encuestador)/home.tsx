@@ -249,11 +249,6 @@ export default function Home() {
         onSignOut={signOut}
         color="#1a472a"
       />
-      <View style={{ backgroundColor: '#dc2626', padding: 10 }}>
-        <Text style={{ color: '#fff', fontWeight: '700', textAlign: 'center' }}>
-          🔴 TEST OTA — si ves esto, el update se aplicó
-        </Text>
-      </View>
       {perfil?.rol === 'coordinador' && (
         <TouchableOpacity
           style={s.modoCoorBtn}
