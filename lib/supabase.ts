@@ -49,10 +49,23 @@ const ChunkedSecureStore = {
   },
 }
 
+// Estas vars se inyectan en build/publish time (EAS Environment Variables por
+// ambiente: production/preview/development). Si falta alguna, createClient()
+// tira un error genérico al importar el módulo — apenas arranca la app, antes
+// de cualquier render — y expo-updates puede enmascararlo como una pantalla
+// gris que "no inicia" en vez de mostrar el error real. Este chequeo deja un
+// mensaje claro en los logs para no repetir esa cacería.
+if (!process.env.EXPO_PUBLIC_SUPABASE_URL || !process.env.EXPO_PUBLIC_SUPABASE_KEY) {
+  throw new Error(
+    '[supabase] Faltan EXPO_PUBLIC_SUPABASE_URL / EXPO_PUBLIC_SUPABASE_KEY. ' +
+    'Revisar "eas env:list --environment <preview|production|development>".'
+  )
+}
+
 // Cliente normal (para la mayoría de las operaciones)
 export const supabase = createClient(
-  process.env.EXPO_PUBLIC_SUPABASE_URL!,
-  process.env.EXPO_PUBLIC_SUPABASE_KEY!,   // ← anon key
+  process.env.EXPO_PUBLIC_SUPABASE_URL,
+  process.env.EXPO_PUBLIC_SUPABASE_KEY,   // ← anon key
   {
     auth: {
       storage: ChunkedSecureStore,

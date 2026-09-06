@@ -4,6 +4,25 @@ import { useAuth } from '../lib/auth'
 import { View, Text, StyleSheet, Animated } from 'react-native'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { LogoSvg } from '../components/UI/LogoSvg'
+import * as Updates from 'expo-updates'
+
+// Chequeo de OTA solo en el arranque en frío (este layout se monta una
+// única vez por apertura de la app) — nunca a mitad de una encuesta en
+// curso. Si hay update, se aplica antes de que termine el splash; si no,
+// no bloquea nada. `checkAutomatically: "ON_LOAD"` (default) queda como
+// red de respaldo por si esto falla o tarda.
+async function chequearUpdateOTA() {
+  try {
+    if (__DEV__ || !Updates.isEnabled) return
+    const check = await Updates.checkForUpdateAsync()
+    if (check.isAvailable) {
+      await Updates.fetchUpdateAsync()
+      await Updates.reloadAsync()
+    }
+  } catch (e) {
+    console.log('[ota]', e)
+  }
+}
 
 function SplashScreen({ onFinish }: { onFinish: () => void }) {
   const opacity  = useRef(new Animated.Value(0)).current
@@ -45,6 +64,8 @@ export default function RootLayout() {
   const router   = useRouter()
   const segments = useSegments()
   const [splashDone, setSplashDone] = useState(false)
+
+  useEffect(() => { chequearUpdateOTA() }, [])
 
   useEffect(() => {
     if (loading || !splashDone) return
