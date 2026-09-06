@@ -1,0 +1,56 @@
+name: EAS Update (production)
+
+# Publica un update OTA al canal "production" en cada push a main. Es
+# JS/assets nomás (equivalente a un deploy de Vercel) — no compila un APK
+# nuevo ni consume build minutes. Si el push trae cambios nativos (nueva
+# dependencia nativa, permiso, plugin) esto NO alcanza: sigue haciendo falta
+# un `eas build` manual además de esto.
+#
+# Va directo a "production" (decisión del 6/sep/2026): los merges a main se
+# hacen a propósito cuando no hay nadie en campo, así que no hace falta un
+# canal "preview" intermedio como paso manual aparte.
+#
+# Requiere el secret EXPO_TOKEN en este repo (Settings → Secrets and
+# variables → Actions), generado en
+# https://expo.dev/accounts/paralelo/settings/access-tokens.
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check for EXPO_TOKEN
+        run: |
+          if [ -z "${{ secrets.EXPO_TOKEN }}" ]; then
+            echo "Falta el secret EXPO_TOKEN en este repo (Settings → Secrets and variables → Actions)."
+            exit 1
+          fi
+
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Publish OTA update to production
+        run: |
+          eas update \
+            --branch production \
+            --environment production \
+            --non-interactive \
+            --message "${{ github.event.head_commit.message }}"
