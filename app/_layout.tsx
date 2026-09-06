@@ -46,7 +46,7 @@ function SplashScreen({ onFinish }: { onFinish: () => void }) {
     <View style={ss.container}>
       <Animated.View style={[ss.content, { opacity, transform: [{ scale }] }]}>
         <LogoSvg width={220} color="#ffffff" accentColor="#52B788" />
-        <Text style={ss.tagline}>Encuestas de campo en tiempo real</Text>
+        <Text style={ss.tagline}>Encuestas de campo en tiempo real — OTA test</Text>
         <View style={ss.progressTrack}>
           <Animated.View style={[
             ss.progressFill,
