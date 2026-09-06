@@ -38,16 +38,18 @@ jobs:
           node-version: 20
           cache: npm
 
-      - name: Setup EAS
-        uses: expo/expo-github-action@v8
-        with:
-          eas-version: latest
-          token: ${{ secrets.EXPO_TOKEN }}
+      - name: Install eas-cli
+        # No usamos expo/expo-github-action: su instalador interno tira eas-cli
+        # con yarn y eso falla en ubuntu-latest con las versiones actuales de
+        # Node/corepack. npm global es más simple y no depende de yarn.
+        run: npm install -g eas-cli
 
       - name: Install dependencies
         run: npm ci
 
       - name: Publish OTA update to production
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
           eas update \
             --branch production \
