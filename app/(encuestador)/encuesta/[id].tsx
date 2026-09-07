@@ -52,6 +52,16 @@ function distanciaMetros(
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+// Formatea segundos como "Xm Ys" (o solo segundos si dura menos de un
+// minuto) — se usa tanto para el objetivo configurado como para el
+// promedio calculado, en el mapa y en la pantalla de fin.
+function formatDuracion(segundos: number): string {
+  const mins = Math.floor(segundos / 60);
+  const secs = Math.round(segundos % 60);
+  if (mins === 0) return `${secs}s`;
+  return secs > 0 ? `${mins}m ${secs}s` : `${mins} min`;
+}
+
 function evaluarCondicionales(pregunta: any, respuesta: any) {
   const cond = pregunta?.condicionales;
   if (!cond?.reglas?.length) return null;
@@ -75,14 +85,16 @@ function MapaZonaEncuestador({
   ubicacion,
   estadoCalle,
   pendientesOffline = 0,
+  tiempoObjetivoMinutos,
   onComenzar,
   onSalir,
   insets = { bottom: 0, top: 0, left: 0, right: 0 },
 }: {
   zonaGeojson: any;
   ubicacion: { lat: number; lng: number } | null;
-  estadoCalle: { puede_encuestar: boolean; completadas: number; no_respuesta: number; total: number; cuota: number; restantes: number; config: any } | null;
+  estadoCalle: { puede_encuestar: boolean; completadas: number; no_respuesta: number; total: number; cuota: number; restantes: number; config: any; tiempo_promedio_segundos?: number | null } | null;
   pendientesOffline?: number;
+  tiempoObjetivoMinutos?: number | null;
   onComenzar: () => void;
   onSalir: () => void;
   insets?: { bottom: number; top: number; left: number; right: number };
@@ -175,30 +187,26 @@ function MapaZonaEncuestador({
           </View>
         )}
 
-        {/* Config muestreo */}
-        {estadoCalle?.config && (
-          <View style={mz.configRow}>
-            {estadoCalle.config.cuota_por_encuestador && (
-              <View style={mz.configChip}>
-                <Text style={mz.configChipText}>🎯 Cuota: {estadoCalle.config.cuota_por_encuestador}</Text>
-              </View>
+        {/* Tiempo objetivo + promedio calculado — reemplaza los chips de
+            config_muestreo (cuota, salto, sentido de recorrido) que antes
+            se mostraban acá: la cuota ya está arriba en el stats row, y
+            salto/sentido de recorrido son datos de configuración interna,
+            no algo que el encuestador necesite ver. El promedio lo manda
+            get_estado_encuesta_callejera (tiempo_promedio_segundos) — se
+            compara contra el objetivo para el 🟢/🔴. Ver feedback 7/sep/2026. */}
+        {(tiempoObjetivoMinutos != null || estadoCalle?.tiempo_promedio_segundos != null) && (
+          <Text style={mz.tiempoObjetivoText}>
+            {tiempoObjetivoMinutos != null && `⏱️ Objetivo: ${tiempoObjetivoMinutos} min`}
+            {tiempoObjetivoMinutos != null && estadoCalle?.tiempo_promedio_segundos != null && '  ·  '}
+            {estadoCalle?.tiempo_promedio_segundos != null && (
+              <Text style={{ fontWeight: '800' }}>
+                Tu promedio: {formatDuracion(estadoCalle.tiempo_promedio_segundos)}
+                {tiempoObjetivoMinutos != null && (
+                  estadoCalle.tiempo_promedio_segundos <= tiempoObjetivoMinutos * 60 ? '  🟢' : '  🔴'
+                )}
+              </Text>
             )}
-            {(estadoCalle.config.intervalo_salto || estadoCalle.config.salto_sistematico) && (
-              <View style={mz.configChip}>
-                <Text style={mz.configChipText}>↕ Salto: {estadoCalle.config.intervalo_salto || estadoCalle.config.salto_sistematico}</Text>
-              </View>
-            )}
-            {estadoCalle.config.inicio_aleatorio && (
-              <View style={mz.configChip}>
-                <Text style={mz.configChipText}>🎲 Inicio aleatorio</Text>
-              </View>
-            )}
-            {estadoCalle.config.sentido_recorrido && (
-              <View style={mz.configChip}>
-                <Text style={mz.configChipText}>🔄 {estadoCalle.config.sentido_recorrido}</Text>
-              </View>
-            )}
-          </View>
+          </Text>
         )}
 
         {/* Sin conexión — visible todo el tiempo que dure la cola sin
@@ -324,9 +332,7 @@ const mz = StyleSheet.create({
   progBar:        { flex: 1, height: 6, backgroundColor: 'rgba(255,255,255,0.3)', borderRadius: 3, overflow: 'hidden' },
   progFill:       { height: 6, backgroundColor: '#74c69d', borderRadius: 3 },
   progText:       { color: '#d8f3dc', fontSize: 12, fontWeight: '700', width: 36, textAlign: 'right' },
-  configRow:      { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  configChip:     { backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 100, paddingHorizontal: 10, paddingVertical: 4 },
-  configChipText: { color: '#d8f3dc', fontSize: 11, fontWeight: '600' },
+  tiempoObjetivoText: { color: 'rgba(255,255,255,0.75)', fontSize: 12, fontWeight: '600' },
   offlineBanner:     { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(254,243,199,0.95)', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8, marginTop: 8 },
   offlineBannerText: { color: '#92400e', fontSize: 12, fontWeight: '700', flex: 1 },
   btnComenzar:    { position: 'absolute', left: 20, right: 20, backgroundColor: '#1a472a', borderRadius: 14, paddingVertical: 16, alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 8, elevation: 5 },
@@ -1072,6 +1078,7 @@ export default function EncuestaScreen() {
     cuota: number;
     restantes: number;
     config: any;
+    tiempo_promedio_segundos?: number | null;
   } | null>(null);
 
   // Estado de encuesta
@@ -1499,6 +1506,7 @@ export default function EncuestaScreen() {
         ubicacion={ubicacion}
         estadoCalle={estadoCalle}
         pendientesOffline={pendientesOffline}
+        tiempoObjetivoMinutos={encuesta?.tiempo_objetivo_minutos}
         onComenzar={() => {
           inicioRef.current = Date.now();
           setPantalla(preguntaParticipa ? "participa" : "encuesta");
@@ -1719,12 +1727,28 @@ export default function EncuestaScreen() {
         </View>
       )}
       {!noResponde && duracionSegundos != null && encuesta?.tiempo_objetivo_minutos != null && (() => {
-        const objetivoSegundos = encuesta.tiempo_objetivo_minutos * 60;
+        const objetivoMinutos = encuesta.tiempo_objetivo_minutos;
+        const objetivoSegundos = objetivoMinutos * 60;
         const dentroDelObjetivo = duracionSegundos <= objetivoSegundos;
+        // Promedio del encuestador actualizado con esta encuesta recién
+        // completada — estadoCalle todavía trae los datos de ANTES de esta
+        // encuesta (se refresca recién al volver al mapa, mismo criterio que
+        // el "+1" que ya se usa arriba para completadas), así que se estima
+        // el nuevo promedio ponderado acá en vez de esperar otro round-trip.
+        // Ver PLAN-tiempo-encuestas-y-mensajes.md, sección 1.
+        const promedioAnteriorSegundos = estadoCalle?.tiempo_promedio_segundos ?? null;
+        const completadasAnteriores = estadoCalle?.completadas ?? 0;
+        const promedioNuevoSegundos = promedioAnteriorSegundos != null
+          ? Math.round((promedioAnteriorSegundos * completadasAnteriores + duracionSegundos) / (completadasAnteriores + 1))
+          : duracionSegundos;
+        const promedioDentroDelObjetivo = promedioNuevoSegundos <= objetivoSegundos;
         return (
           <View style={{ backgroundColor: dentroDelObjetivo ? "#d8f3dc" : "#fee2e2", borderRadius: 12, padding: 12, marginBottom: 16, width: "100%" }}>
             <Text style={{ fontSize: 13, fontWeight: "700", color: dentroDelObjetivo ? "#1a472a" : "#991b1b", textAlign: "center" }}>
               {dentroDelObjetivo ? "🟢 Venís bien de tiempo" : "🔴 Te está tomando más tiempo del esperado"}
+            </Text>
+            <Text style={{ fontSize: 12, fontWeight: "600", color: dentroDelObjetivo ? "#2d6a4f" : "#991b1b", textAlign: "center", marginTop: 4 }}>
+              Objetivo: {objetivoMinutos} min · Tu promedio: {formatDuracion(promedioNuevoSegundos)} {promedioDentroDelObjetivo ? "🟢" : "🔴"}
             </Text>
           </View>
         );
