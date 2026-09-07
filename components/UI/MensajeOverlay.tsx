@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native'
 import { useAuth } from '../../lib/auth'
 import { fetchMensajesPendientes, marcarMensajeLeido, useMensajesRealtime, MensajePendiente } from '../../lib/mensajes'
+import { useAutoRefetch } from '../../lib/realtime'
 
 // Overlay a pantalla completa, montado como hermano de <Stack> en
 // app/_layout.tsx (no es una ruta) — así se puede mostrar arriba de
@@ -11,6 +12,15 @@ import { fetchMensajesPendientes, marcarMensajeLeido, useMensajesRealtime, Mensa
 //
 // Si llegan varios mensajes sin leer se muestran de a uno, en orden de
 // llegada; "Entendido" marca el actual como leído y pasa al siguiente.
+//
+// Bug reportado 7/sep/2026: dos mensajes seguidos no aparecieron hasta
+// cerrar y reabrir la app — el único disparador era el Realtime, y esa
+// suscripción se puede perder (reconexión de red, app en segundo plano
+// rato largo, etc.) sin que quede ningún aviso visible. Se deja el
+// Realtime para el caso normal (llega al toque) y se suma polling de
+// respaldo cada 20s + refetch al volver a primer plano (useAutoRefetch,
+// mismo patrón que la Sección 7 del plan) para que, en el peor caso, el
+// mensaje aparezca solo unos segundos tarde en vez de nunca.
 export function MensajeOverlay() {
   const { perfil } = useAuth()
   const [cola, setCola] = useState<MensajePendiente[]>([])
@@ -24,6 +34,7 @@ export function MensajeOverlay() {
   useEffect(() => { cargar() }, [cargar])
 
   useMensajesRealtime(perfil?.rol === 'encuestador' ? perfil?.id : undefined, cargar)
+  useAutoRefetch(cargar, 20_000)
 
   if (!cola.length) return null
 
