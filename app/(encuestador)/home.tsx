@@ -6,6 +6,7 @@ import { useAuth } from '../../lib/auth'
 import { AppHeader } from '../../components/UI/AppHeader'
 import { useGeofencing } from '../../hooks/useGeofencing'
 import { supabase } from '../../lib/supabase'
+import { useAutoRefetch, useRealtimeAsignaciones } from '../../lib/realtime'
 
 type EstadoEncuesta = 'disponible' | 'fuera_zona' | 'sin_gps' | 'sin_fecha' | 'cargando'
 
@@ -150,6 +151,16 @@ export default function Home() {
     if (!perfil?.id || authLoading) return
     cargarEncuestas()
   }, [perfil?.id, authLoading])
+
+  // Sección 7 del plan: refetch al volver a primer plano + polling cada
+  // 60s + realtime sobre asignaciones_encuesta — así una encuesta nueva
+  // asignada aparece sola, sin pull-to-refresh ni reabrir la app.
+  useAutoRefetch(() => {
+    if (perfil?.id && !authLoading) cargarEncuestas()
+  }, 60_000)
+  useRealtimeAsignaciones(perfil?.id || '', () => {
+    if (perfil?.id && !authLoading) cargarEncuestas()
+  })
 
   async function cargarEncuestas() {
     setLoading(true)

@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { supabase } from '../../lib/supabase'
 import { AppHeader } from '../../components/UI/AppHeader'
 import { useAuth } from '../../lib/auth'
+import { useAutoRefetch } from '../../lib/realtime'
 
 type Encuesta = {
   id: string
@@ -50,6 +51,15 @@ export default function EncuestasCoordinador() {
     if (!perfil?.id) return
     cargar()
   }, [perfil?.id])
+
+  // Sección 7 del plan: refetch al volver a primer plano + polling cada
+  // 60s, mismo mecanismo que app/(encuestador)/home.tsx. Sin realtime acá:
+  // un coordinador puede tener varios equipos, y postgres_changes filtra
+  // por un único valor de columna — no vale la pena suscribirse sin filtro
+  // solo para esto (foreground + polling alcanza para este caso).
+  useAutoRefetch(() => {
+    if (perfil?.id) cargar()
+  }, 60_000)
 
   async function cargar() {
     // 1. Equipos del coordinador

@@ -28,7 +28,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { supabase } from "../../../lib/supabase";
 import { useAuth } from "../../../lib/auth";
-import { encolarRespuesta, sincronizarCola, cantidadPendiente } from "../../../lib/offlineQueue";
+import { encolarRespuesta, sincronizarCola, cantidadPendiente, contarPendientesPorTipo, generarIdempotencyKey } from "../../../lib/offlineQueue";
 import { useGeofencing } from "../../../hooks/useGeofencing";
 
 // ── Utilidades ───────────────────────────────────────────────────
@@ -74,6 +74,7 @@ function MapaZonaEncuestador({
   zonaGeojson,
   ubicacion,
   estadoCalle,
+  pendientesOffline = 0,
   onComenzar,
   onSalir,
   insets = { bottom: 0, top: 0, left: 0, right: 0 },
@@ -81,6 +82,7 @@ function MapaZonaEncuestador({
   zonaGeojson: any;
   ubicacion: { lat: number; lng: number } | null;
   estadoCalle: { puede_encuestar: boolean; completadas: number; no_respuesta: number; total: number; cuota: number; restantes: number; config: any } | null;
+  pendientesOffline?: number;
   onComenzar: () => void;
   onSalir: () => void;
   insets?: { bottom: number; top: number; left: number; right: number };
@@ -198,6 +200,18 @@ function MapaZonaEncuestador({
             )}
           </View>
         )}
+
+        {/* Sin conexión — visible todo el tiempo que dure la cola sin
+            sincronizar, no solo una vez en la pantalla "fin". Ver
+            PLAN-tiempo-encuestas-y-mensajes.md, sección 4. */}
+        {pendientesOffline > 0 && (
+          <View style={mz.offlineBanner}>
+            <Text style={{ fontSize: 14 }}>📶</Text>
+            <Text style={mz.offlineBannerText}>
+              {pendientesOffline} encuesta{pendientesOffline > 1 ? "s" : ""} sin conexión — se sincronizan solas
+            </Text>
+          </View>
+        )}
       </View>
 
       {/* Mapa — MapLibre en build, Leaflet en Expo Go */}
@@ -313,6 +327,8 @@ const mz = StyleSheet.create({
   configRow:      { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   configChip:     { backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 100, paddingHorizontal: 10, paddingVertical: 4 },
   configChipText: { color: '#d8f3dc', fontSize: 11, fontWeight: '600' },
+  offlineBanner:     { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(254,243,199,0.95)', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8, marginTop: 8 },
+  offlineBannerText: { color: '#92400e', fontSize: 12, fontWeight: '700', flex: 1 },
   btnComenzar:    { position: 'absolute', left: 20, right: 20, backgroundColor: '#1a472a', borderRadius: 14, paddingVertical: 16, alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 8, elevation: 5 },
   btnComenzarText: { color: '#fff', fontSize: 16, fontWeight: '800' },
   cuotaWrap:      { position: 'absolute', left: 20, right: 20, backgroundColor: '#374151', borderRadius: 14, paddingVertical: 14, alignItems: 'center' },
@@ -1067,6 +1083,10 @@ export default function EncuestaScreen() {
   const [saving, setSaving] = useState(false);
   const [noResponde, setNoResponde] = useState(false);
   const [pendientesOffline, setPendientesOffline] = useState(0);
+  // Momento real en que arranca a responder (sale de "mapa"), para medir
+  // duración de la encuesta — ver PLAN-tiempo-encuestas-y-mensajes.md, sección 1.
+  const inicioRef = useRef<number | null>(null);
+  const [duracionSegundos, setDuracionSegundos] = useState<number | null>(null);
 
   // ── BackHandler — interceptar botón físico de atrás ──
   // usamos ref para que el listener siempre lea el valor actual de pantalla
@@ -1119,7 +1139,7 @@ export default function EncuestaScreen() {
     if (!asignacionParam) {
       const { data: encData, error: encError } = await supabase
         .from('encuestas')
-        .select('id, nombre, tipo_encuesta, estado_produccion, config_muestreo')
+        .select('id, nombre, tipo_encuesta, estado_produccion, config_muestreo, tiempo_objetivo_minutos')
         .eq('id', id)
         .single();
       if (encData) {
@@ -1201,7 +1221,28 @@ export default function EncuestaScreen() {
     const { data } = await supabase.rpc("get_estado_encuesta_callejera", {
       p_asignacion_id: asignacionParam,
     });
-    if (data) setEstadoCalle(data);
+    if (data) {
+      // Sumar lo que quedó en la cola offline para esta asignación — la RPC
+      // solo ve lo que ya está sincronizado, así que sin esto el contador
+      // de cuota queda congelado mientras el encuestador sigue sin conexión.
+      // Ver PLAN-tiempo-encuestas-y-mensajes.md, sección 4.
+      const { completadas: compPend, noRespuesta: nrPend } = await contarPendientesPorTipo(asignacionParam);
+      setPendientesOffline(compPend + nrPend);
+      if (compPend || nrPend) {
+        const completadas = data.completadas + compPend;
+        const noRespuesta = data.no_respuesta + nrPend;
+        setEstadoCalle({
+          ...data,
+          completadas,
+          no_respuesta: noRespuesta,
+          total: completadas + noRespuesta,
+          restantes: Math.max(0, data.cuota - completadas),
+          puede_encuestar: completadas < data.cuota,
+        });
+      } else {
+        setEstadoCalle(data);
+      }
+    }
     setLoadingP(false);
   }
 
@@ -1314,6 +1355,10 @@ export default function EncuestaScreen() {
   async function guardarYFinalizar(razon?: string) {
     setSaving(true);
     try {
+      // Si por algún motivo no se registró el inicio (no debería pasar, onComenzar
+      // siempre lo setea), caemos a now() — mismo comportamiento que antes de esta
+      // migración, en vez de romper el guardado.
+      const iniciadaEn = new Date(inicioRef.current ?? Date.now()).toISOString();
       const filas = Object.entries(respuestas).map(([pregunta_id, valor]) => {
         const esOpcion =
           valor !== null && typeof valor === "object" && "opcionId" in valor;
@@ -1344,7 +1389,13 @@ export default function EncuestaScreen() {
       }
 
       // ── Intentar enviar directo ──
+      // idempotencyKey se genera una sola vez acá y se reusa si este intento
+      // cae a la cola offline (ver guardarCola en lib/offlineQueue.ts) — así,
+      // si guardar_encuesta_completa ya había insertado la sesión pero
+      // registrar_visita falló después (Bug B, sección 5 del plan), el
+      // reintento no duplica la fila.
       let enviado = false;
+      const idempotencyKey = generarIdempotencyKey();
       try {
         const { data: sesionId, error } = await supabase.rpc(
           "guardar_encuesta_completa",
@@ -1355,6 +1406,8 @@ export default function EncuestaScreen() {
             p_respuestas: filas,
             p_razon_no_respuesta: razon || null,
             p_participa_pregunta_id: preguntaParticipa?.id || null,
+            p_iniciada_en: iniciadaEn,
+            p_idempotency_key: idempotencyKey,
           },
         );
         if (!error && sesionId) {
@@ -1381,6 +1434,8 @@ export default function EncuestaScreen() {
           razon_no_respuesta: razon || null,
           participa_pregunta_id: preguntaParticipa?.id || null,
           parcela_id: parcela?.parcela_id || null,
+          iniciada_en: iniciadaEn,
+          idempotency_key: idempotencyKey,
         });
         // Intentar sync en background
         sincronizarCola().catch(() => {});
@@ -1388,9 +1443,13 @@ export default function EncuestaScreen() {
 
       // ── Siempre avanzar, sin importar si hubo conexión ──
       setNoResponde(!!razon);
+      setDuracionSegundos(
+        inicioRef.current ? Math.round((Date.now() - inicioRef.current) / 1000) : null,
+      );
       setPantalla("fin");
-      // Actualizar contador de pendientes
-      cantidadPendiente().then(setPendientesOffline);
+      // Actualizar contador de pendientes (solo de esta asignación, para no
+      // mezclar con otra asignación que pueda tener items en la cola).
+      cantidadPendiente(asignacion || undefined).then(setPendientesOffline);
     } catch (err: any) {
       Alert.alert("Error inesperado", err?.message || "No se pudo guardar");
     } finally {
@@ -1405,6 +1464,8 @@ export default function EncuestaScreen() {
     setNoResponde(false);
     setPaso(0);
     setOcultas(new Set());
+    inicioRef.current = null;
+    setDuracionSegundos(null);
     if (esCallejera) {
       await cargarEstadoCallejera(asignacion);
       setPantalla("mapa"); // volver al mapa, no a participa
@@ -1437,7 +1498,11 @@ export default function EncuestaScreen() {
         zonaGeojson={zonaGeojson}
         ubicacion={ubicacion}
         estadoCalle={estadoCalle}
-        onComenzar={() => setPantalla(preguntaParticipa ? "participa" : "encuesta")}
+        pendientesOffline={pendientesOffline}
+        onComenzar={() => {
+          inicioRef.current = Date.now();
+          setPantalla(preguntaParticipa ? "participa" : "encuesta");
+        }}
         onSalir={() => router.back()}
         insets={insets}
       />
@@ -1653,6 +1718,17 @@ export default function EncuestaScreen() {
           </Text>
         </View>
       )}
+      {!noResponde && duracionSegundos != null && encuesta?.tiempo_objetivo_minutos != null && (() => {
+        const objetivoSegundos = encuesta.tiempo_objetivo_minutos * 60;
+        const dentroDelObjetivo = duracionSegundos <= objetivoSegundos;
+        return (
+          <View style={{ backgroundColor: dentroDelObjetivo ? "#d8f3dc" : "#fee2e2", borderRadius: 12, padding: 12, marginBottom: 16, width: "100%" }}>
+            <Text style={{ fontSize: 13, fontWeight: "700", color: dentroDelObjetivo ? "#1a472a" : "#991b1b", textAlign: "center" }}>
+              {dentroDelObjetivo ? "🟢 Venís bien de tiempo" : "🔴 Te está tomando más tiempo del esperado"}
+            </Text>
+          </View>
+        );
+      })()}
       {pendientesOffline > 0 && (
         <View style={{ backgroundColor: "#fef3c7", borderRadius: 12, padding: 12, marginBottom: 16, width: "100%", flexDirection: "row", alignItems: "center", gap: 8 }}>
           <Text style={{ fontSize: 16 }}>📶</Text>

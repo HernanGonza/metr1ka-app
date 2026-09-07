@@ -4,6 +4,7 @@ import { useAuth } from '../lib/auth'
 import { View, Text, StyleSheet, Animated } from 'react-native'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { LogoSvg } from '../components/UI/LogoSvg'
+import { MensajeOverlay } from '../components/UI/MensajeOverlay'
 import * as Updates from 'expo-updates'
 
 // Chequeo de OTA solo en el arranque en frío (este layout se monta una
@@ -112,6 +113,7 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <Stack screenOptions={{ headerShown: false, gestureEnabled: false, animation: 'fade' }} />
+      <MensajeOverlay />
     </SafeAreaProvider>
   )
 }
