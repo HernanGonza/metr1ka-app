@@ -98,11 +98,15 @@ export default function EncuestasCoordinador() {
     if (!encuestaIds.length) { setEncuestas([]); setLoading(false); setRefresh(false); return }
 
     // 4. Traer datos completos de las encuestas directamente
+    // Las encuestas online nunca deberían llegar hasta acá (no tienen zona
+    // ni equipo, así que encuestaIds nunca las incluye) — se agrega el
+    // filtro igual, explícito, para que quede claro que es a propósito.
     const { data: encs } = await supabase
       .from('encuestas')
       .select('id, nombre, descripcion, estado_produccion, tipo_encuesta, fecha_inicio, fecha_fin')
       .in('id', encuestaIds)
       .in('estado_produccion', ['publicada', 'en_proceso', 'pendiente'])
+      .neq('tipo_encuesta', 'online')
 
     const lista: Encuesta[] = (encs || []).map(enc => ({
       id:                enc.id,

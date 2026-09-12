@@ -6,8 +6,8 @@ import { useAuth } from '../../lib/auth'
 import { AppHeader } from '../../components/UI/AppHeader'
 import { supabase } from '../../lib/supabase'
 
-const TIPO_COLOR: Record<string, string> = { callejera: '#0369a1', domiciliaria: '#7c3aed', telefonica: '#b45309' }
-const TIPO_LABEL: Record<string, string> = { callejera: '🚶 Callejera', domiciliaria: '🏠 Domiciliaria', telefonica: '📞 Telefónica' }
+const TIPO_COLOR: Record<string, string> = { callejera: '#0369a1', domiciliaria: '#7c3aed', telefonica: '#b45309', online: '#b45309' }
+const TIPO_LABEL: Record<string, string> = { callejera: '🚶 Callejera', domiciliaria: '🏠 Domiciliaria', telefonica: '📞 Telefónica', online: '🌐 Online' }
 
 export default function Encuestas() {
   const { perfil, signOut } = useAuth()
@@ -20,12 +20,17 @@ export default function Encuestas() {
   useEffect(() => { if (perfil?.organizacion_id) cargar() }, [perfil?.organizacion_id])
 
   async function cargar() {
-    const { data } = await supabase
+    // Las encuestas online son solo para admin — ni gestor (que comparte
+    // estas mismas pantallas en el mobile) ni ningún otro rol las ve acá.
+    let query = supabase
       .from('encuestas')
       .select('id, nombre, descripcion, estado_produccion, tipo_encuesta')
       .eq('organizacion_id', perfil!.organizacion_id!)
       .in('estado_produccion', ['publicada', 'completada'])
-      .order('creado_en', { ascending: false })
+
+    if (perfil?.rol !== 'admin') query = query.neq('tipo_encuesta', 'online')
+
+    const { data } = await query.order('creado_en', { ascending: false })
 
     const conStats = await Promise.all(
       (data || []).map(async enc => {
