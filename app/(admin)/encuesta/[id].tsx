@@ -281,12 +281,14 @@ export default function EncuestaDetalle() {
   const insets = useSafeAreaInsets()
   const { perfil } = useAuth()
 
+  const [encuesta,      setEncuesta]      = useState<any>(null)
   const [equipos,       setEquipos]       = useState<any[]>([])
   const [zonas,         setZonas]         = useState<any[]>([])
   const [encuestadores, setEncuestadores] = useState<any[]>([])
   const [equipoId,      setEquipoId]      = useState<string | null>(null)
   const [zonaId,        setZonaId]        = useState<string | null>(null)
   const [encuestadorId, setEncuestadorId] = useState<string | null>(null)
+  const esOnline = encuesta?.tipo_encuesta === 'online'
 
   const [preguntas,   setPreguntas]   = useState<any[]>([])
   const [resultados,  setResultados]  = useState<any>(null)
@@ -321,7 +323,9 @@ export default function EncuestaDetalle() {
   }, [id])
 
   async function init() {
-    const [pregRes, eqRes, encuRes, zonaRes] = await Promise.all([
+    const [encRes, pregRes, eqRes, encuRes, zonaRes] = await Promise.all([
+      supabase.from('encuestas').select('id, nombre, tipo_encuesta, subdominio')
+        .eq('id', id).single(),
       supabase.from('preguntas').select('id, texto, tipo, clave_base, orden, config_matriz')
         .eq('encuesta_id', id).order('orden'),
       supabase.from('equipos').select('id, nombre')
@@ -332,6 +336,7 @@ export default function EncuestaDetalle() {
       supabase.from('encuesta_zonas').select('id, nombre, equipo_id')
         .eq('encuesta_id', id).order('orden'),
     ])
+    setEncuesta(encRes.data || null)
     setPreguntas(pregRes.data || [])
     setEquipos(eqRes.data || [])
     setEncuestadores(encuRes.data?.map((e: any) => ({ id: e.id, nombre: e.nombre_completo })) || [])
@@ -389,24 +394,33 @@ export default function EncuestaDetalle() {
         <TouchableOpacity onPress={() => router.back()}>
           <Text style={s.back}>← Volver</Text>
         </TouchableOpacity>
+        {esOnline && (
+          <Text style={s.dominioHeader}>
+            🌐 {encuesta?.subdominio ? `${encuesta.subdominio}.metr1ka.com` : 'Sin dominio asignado'}
+          </Text>
+        )}
       </View>
 
       <ScrollView
         refreshControl={<RefreshControl refreshing={refresh} onRefresh={() => { setRefresh(true); init() }} tintColor="#1a472a" />}
         contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
       >
-        {/* Filtros */}
-        <View style={s.filtrosGrid}>
-          <View style={{ width: '47%' }}>
-            <Selector label="Equipo" value={equipoId} opciones={equipos} onSelect={setEquipoId} placeholder="Todos los equipos" />
+        {/* Filtros — no aplican a una encuesta online: no tiene equipos,
+            zonas ni encuestadores asignados (nadie se loguea para
+            responderla), a diferencia de una encuesta de campo. */}
+        {!esOnline && (
+          <View style={s.filtrosGrid}>
+            <View style={{ width: '47%' }}>
+              <Selector label="Equipo" value={equipoId} opciones={equipos} onSelect={setEquipoId} placeholder="Todos los equipos" />
+            </View>
+            <View style={{ width: '47%' }}>
+              <Selector label="Zona" value={zonaId} opciones={zonasFiltradas} onSelect={setZonaId} placeholder="Todas las zonas" />
+            </View>
+            <View style={{ width: '100%' }}>
+              <Selector label="Encuestador" value={encuestadorId} opciones={encuestadores} onSelect={setEncuestadorId} placeholder="Todos los encuestadores" />
+            </View>
           </View>
-          <View style={{ width: '47%' }}>
-            <Selector label="Zona" value={zonaId} opciones={zonasFiltradas} onSelect={setZonaId} placeholder="Todas las zonas" />
-          </View>
-          <View style={{ width: '100%' }}>
-            <Selector label="Encuestador" value={encuestadorId} opciones={encuestadores} onSelect={setEncuestadorId} placeholder="Todos los encuestadores" />
-          </View>
-        </View>
+        )}
 
         {/* KPIs */}
         <View style={s.kpiRow}>
@@ -462,8 +476,9 @@ export default function EncuestaDetalle() {
 
 const s = StyleSheet.create({
   page:     { flex: 1, backgroundColor: '#f2f1ee' },
-  header:   { backgroundColor: '#fff', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
+  header:   { backgroundColor: '#fff', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#e5e7eb', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   back:     { fontSize: 14, fontWeight: '600', color: '#1a472a' },
+  dominioHeader: { fontSize: 12, fontWeight: '600', color: '#0369a1' },
   filtrosGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, padding: 16, paddingBottom: 0, justifyContent: 'space-between' },
   kpiRow:   { flexDirection: 'row', paddingHorizontal: 16, gap: 8, marginVertical: 12 },
   kpi:      { flex: 1, borderRadius: 14, padding: 14 },

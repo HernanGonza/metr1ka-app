@@ -6,8 +6,8 @@ import { useAuth } from '../../lib/auth'
 import { AppHeader } from '../../components/UI/AppHeader'
 import { supabase } from '../../lib/supabase'
 
-const TIPO_COLOR: Record<string, string> = { callejera: '#0369a1', domiciliaria: '#7c3aed', telefonica: '#b45309', online: '#b45309' }
-const TIPO_LABEL: Record<string, string> = { callejera: '🚶 Callejera', domiciliaria: '🏠 Domiciliaria', telefonica: '📞 Telefónica', online: '🌐 Online' }
+const TIPO_COLOR: Record<string, string> = { callejera: '#0369a1', domiciliaria: '#7c3aed', telefonica: '#b45309' }
+const TIPO_LABEL: Record<string, string> = { callejera: '🚶 Callejera', domiciliaria: '🏠 Domiciliaria', telefonica: '📞 Telefónica' }
 
 export default function Encuestas() {
   const { perfil, signOut } = useAuth()
@@ -24,7 +24,7 @@ export default function Encuestas() {
     // estas mismas pantallas en el mobile) ni ningún otro rol las ve acá.
     let query = supabase
       .from('encuestas')
-      .select('id, nombre, descripcion, estado_produccion, tipo_encuesta')
+      .select('id, nombre, descripcion, estado_produccion, tipo_encuesta, subdominio')
       .eq('organizacion_id', perfil!.organizacion_id!)
       .in('estado_produccion', ['publicada', 'completada'])
 
@@ -41,9 +41,15 @@ export default function Encuestas() {
       })
     )
 
-    const publicadas  = conStats.filter(e => e.estado_produccion === 'publicada')
-    const completadas = conStats.filter(e => e.estado_produccion === 'completada')
+    // Online va en su propio apartado, separado de las de campo — no tiene
+    // equipos/zonas/encuestadores, así que la tarjeta y las secciones son
+    // distintas (ver EncuestaDetalleOnline.jsx en el panel web, mismo criterio).
+    const online       = conStats.filter(e => e.tipo_encuesta === 'online')
+    const deCampo      = conStats.filter(e => e.tipo_encuesta !== 'online')
+    const publicadas  = deCampo.filter(e => e.estado_produccion === 'publicada')
+    const completadas = deCampo.filter(e => e.estado_produccion === 'completada')
     const secs = []
+    if (online.length)      secs.push({ title: '🌐 Online', data: online })
     if (publicadas.length)  secs.push({ title: 'Encuestas activas', data: publicadas })
     if (completadas.length) secs.push({ title: 'Completadas', data: completadas })
     setSections(secs)
@@ -74,6 +80,27 @@ export default function Encuestas() {
           </View>
         )}
         renderItem={({ item }) => {
+          if (item.tipo_encuesta === 'online') {
+            return (
+              <TouchableOpacity style={s.card} onPress={() => router.push(`/(admin)/encuesta/${item.id}`)} activeOpacity={0.75}>
+                <View style={[s.badge, { backgroundColor: '#b4530918', borderColor: '#b4530944' }]}>
+                  <Text style={[s.badgeText, { color: '#b45309' }]}>🌐 Online</Text>
+                </View>
+                <Text style={s.nombre}>{item.nombre}</Text>
+                <Text style={s.dominio}>
+                  {item.subdominio ? `${item.subdominio}.metr1ka.com` : 'Sin dominio asignado'}
+                </Text>
+                {item.descripcion ? <Text style={s.desc} numberOfLines={2}>{item.descripcion}</Text> : null}
+                <View style={s.statsRow}>
+                  <View style={s.stat}>
+                    <Text style={[s.statN, { color: '#1a472a' }]}>{item.total}</Text>
+                    <Text style={s.statL}>Respuestas</Text>
+                  </View>
+                  <Text style={s.link}>Ver →</Text>
+                </View>
+              </TouchableOpacity>
+            )
+          }
           const color = TIPO_COLOR[item.tipo_encuesta] || '#1a472a'
           return (
             <TouchableOpacity style={s.card} onPress={() => router.push(`/(admin)/encuesta/${item.id}`)} activeOpacity={0.75}>
@@ -119,6 +146,7 @@ const s = StyleSheet.create({
   badge:    { alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 100, borderWidth: 1, marginBottom: 10 },
   badgeText:{ fontSize: 10, fontWeight: '700' },
   nombre:   { fontSize: 15, fontWeight: '800', color: '#111827', marginBottom: 4 },
+  dominio:  { fontSize: 11, color: '#0369a1', fontFamily: 'monospace' as any, marginBottom: 6 },
   desc:     { fontSize: 12, color: '#6b7280', marginBottom: 8 },
   statsRow: { flexDirection: 'row', alignItems: 'center', gap: 16, paddingTop: 10, marginTop: 6, borderTopWidth: 1, borderTopColor: '#f3f4f6' },
   stat:     { alignItems: 'center' },
