@@ -1366,6 +1366,13 @@ export default function EncuestaScreen() {
       // siempre lo setea), caemos a now() — mismo comportamiento que antes de esta
       // migración, en vez de romper el guardado.
       const iniciadaEn = new Date(inicioRef.current ?? Date.now()).toISOString();
+      // Hora de fin según el reloj del CELULAR (mismo reloj que iniciadaEn).
+      // completada_en la pone el servidor al guardar, así que mezclarla con
+      // iniciadaEn corre la duración por el desfase del reloj y, si la
+      // encuesta se guarda sin señal, la hora de fin pasa a ser la de la
+      // sincronización. El panel usa este par para detectar encuestas
+      // cargadas demasiado rápido (control de calidad por encuestador).
+      const completadaEnDispositivo = new Date().toISOString();
       const filas = Object.entries(respuestas).map(([pregunta_id, valor]) => {
         const esOpcion =
           valor !== null && typeof valor === "object" && "opcionId" in valor;
@@ -1415,6 +1422,7 @@ export default function EncuestaScreen() {
             p_participa_pregunta_id: preguntaParticipa?.id || null,
             p_iniciada_en: iniciadaEn,
             p_idempotency_key: idempotencyKey,
+            p_completada_en_dispositivo: completadaEnDispositivo,
           },
         );
         if (!error && sesionId) {
@@ -1442,6 +1450,7 @@ export default function EncuestaScreen() {
           participa_pregunta_id: preguntaParticipa?.id || null,
           parcela_id: parcela?.parcela_id || null,
           iniciada_en: iniciadaEn,
+          completada_en_dispositivo: completadaEnDispositivo,
           idempotency_key: idempotencyKey,
         });
         // Intentar sync en background
@@ -1564,11 +1573,14 @@ export default function EncuestaScreen() {
         {enParcela && (
           <TouchableOpacity
             style={[s.btnFlotante, { bottom: insets.bottom + 116 }]}
-            onPress={() =>
-              preguntaParticipa
-                ? setPantalla("participa")
-                : setPantalla("encuesta")
-            }
+            onPress={() => {
+              // Igual que onComenzar del modo callejero: sin esto, en
+              // domiciliaria iniciadaEn caía al momento de guardar y la
+              // duración de la encuesta quedaba en ~0 (falso positivo de
+              // "carga rápida" en el control de calidad del panel).
+              inicioRef.current = Date.now();
+              setPantalla(preguntaParticipa ? "participa" : "encuesta");
+            }}
           >
             <Text style={s.btnFlotanteText}>Comenzar encuesta →</Text>
           </TouchableOpacity>

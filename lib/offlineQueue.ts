@@ -16,6 +16,9 @@ export interface ItemCola {
   participa_pregunta_id: string | null
   parcela_id: string | null
   iniciada_en: string | null
+  // Hora de fin según el reloj del celular (ver guardarYFinalizar). Opcional:
+  // los items encolados por una versión anterior de la app no la tienen.
+  completada_en_dispositivo?: string | null
   // Clave estable generada por el llamador (ver generarIdempotencyKey) —
   // se manda como p_idempotency_key a guardar_encuesta_completa. Si esta
   // encuesta ya se había intentado guardar directo y falló solo el paso de
@@ -85,6 +88,7 @@ async function sincronizarItem(item: ItemCola): Promise<boolean> {
       p_participa_pregunta_id: item.participa_pregunta_id,
       p_iniciada_en: item.iniciada_en,
       p_idempotency_key: item.idempotency_key,
+      p_completada_en_dispositivo: item.completada_en_dispositivo ?? null,
     })
     if (error || !sesionId) return false
 
