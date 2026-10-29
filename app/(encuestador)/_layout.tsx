@@ -1,28 +1,47 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
+import { AppState, StyleSheet, View } from 'react-native'
 import { Stack } from 'expo-router'
 import { useAuth } from '../../lib/auth'
 import {
-  pedirPermisoUbicacion,
   iniciarTrackingSingleton,
   detenerTrackingSingleton,
+  diagnosticarGPS,
+  setContextoTelemetriaGPS,
 } from '../../lib/location'
 import { iniciarSyncAutomatico } from '../../lib/offlineQueue'
+import { AlertaUbicacion } from '../../components/UI/AlertaUbicacion'
 
 export default function EncuestadorLayout() {
   const { perfil } = useAuth()
+  // true recién cuando el encuestador pasó la verificación de GPS. Se vuelve
+  // a false si al volver a primer plano el GPS dejó de estar OK.
+  const [gpsVerificado, setGpsVerificado] = useState(false)
+
+  const id  = perfil?.id
+  const org = perfil?.organizacion_id
 
   useEffect(() => {
-    const id  = perfil?.id
-    const org = perfil?.organizacion_id
-    if (!id || !org) return
+    if (id) setContextoTelemetriaGPS(id, org ?? null)
+  }, [id, org])
 
-    pedirPermisoUbicacion().then(ok => {
-      if (!ok) return
-      iniciarTrackingSingleton(id, org)
-    })
+  useEffect(() => {
+    if (!id || !org || !gpsVerificado) return
+    iniciarTrackingSingleton(id, org)
+  }, [id, org, gpsVerificado])
 
+  useEffect(() => {
     return () => { detenerTrackingSingleton() }
-  }, [perfil?.id, perfil?.organizacion_id])
+  }, [id, org])
+
+  // Re-verificar al volver al frente: si el GPS se apagó o se quitó el permiso, bloquear.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', async st => {
+      if (st !== 'active' || !gpsVerificado) return
+      const r = await diagnosticarGPS({ pedirPermiso: false })
+      if (r.estado !== 'ok') setGpsVerificado(false)
+    })
+    return () => sub.remove()
+  }, [gpsVerificado])
 
   // Sincronizar cola offline cuando la app vuelve al frente
   useEffect(() => {
@@ -30,5 +49,15 @@ export default function EncuestadorLayout() {
     return unsub
   }, [])
 
-  return <Stack screenOptions={{ headerShown: false }} />
+  // El Stack queda montado debajo del bloqueo para no perder la navegación.
+  return (
+    <View style={{ flex: 1 }}>
+      <Stack screenOptions={{ headerShown: false }} />
+      {!gpsVerificado && (
+        <View style={[StyleSheet.absoluteFill, { zIndex: 1000, elevation: 1000 }]}>
+          <AlertaUbicacion onListo={() => setGpsVerificado(true)} />
+        </View>
+      )}
+    </View>
+  )
 }

@@ -9,6 +9,9 @@ export interface ItemCola {
   id: string
   creadoEn: number
   asignacion_id: string | null
+  // Coordenadas capturadas en el momento de la encuesta (obtenerPosicionFresca),
+  // no al sincronizar. Son null solo en items encolados por versiones viejas de
+  // la app: esos NO se descartan ni se bloquean, se sincronizan igual.
   latitud: number | null
   longitud: number | null
   respuestas: any[]

@@ -3,6 +3,8 @@ import {
   pedirPermisoUbicacion,
   iniciarTrackingSingleton,
   setLocationCallback,
+  setGpsStatusCallback,
+  removeGpsStatusCallback,
   removeLocationCallback,
   detenerTrackingSingleton,
   puntoEnPoligono,
@@ -24,6 +26,7 @@ let _instanceCount = 0
 export function useGeofencing(encuestadorId: string, organizacionId: string) {
   const [ubicacion, setUbicacion] = useState<{ lat: number; lng: number } | null>(null)
   const [zonas,     setZonas]     = useState<ZonaInfo[]>([])
+  const [gpsActivo, setGpsActivo] = useState(false)
   const zonasRef = useRef<ZonaInfo[]>([])
 
   // Cargar zonas
@@ -61,6 +64,7 @@ export function useGeofencing(encuestadorId: string, organizacionId: string) {
 
     // Registrar callback ANTES de iniciar (para recibir el replay si ya hay ubicación)
     setLocationCallback(handleLocation)
+    setGpsStatusCallback(setGpsActivo)
 
     pedirPermisoUbicacion().then(ok => {
       if (!active || !ok) return
@@ -70,6 +74,7 @@ export function useGeofencing(encuestadorId: string, organizacionId: string) {
     return () => {
       active = false
       removeLocationCallback(handleLocation)
+      removeGpsStatusCallback(setGpsActivo)
       _instanceCount--
       if (_instanceCount <= 0) {
         _instanceCount = 0
@@ -119,6 +124,7 @@ export function useGeofencing(encuestadorId: string, organizacionId: string) {
 
   return {
     ubicacion,
+    gpsActivo,
     zonas,
     encuestaEnZona,
     centroZonaEncuesta,

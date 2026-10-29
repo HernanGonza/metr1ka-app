@@ -30,6 +30,9 @@ import { supabase } from "../../../lib/supabase";
 import { useAuth } from "../../../lib/auth";
 import { encolarRespuesta, sincronizarCola, cantidadPendiente, contarPendientesPorTipo, generarIdempotencyKey } from "../../../lib/offlineQueue";
 import { useGeofencing } from "../../../hooks/useGeofencing";
+import { diagnosticarGPS, type EstadoGPS, type PosicionFresca } from "../../../lib/location";
+import { AlertaUbicacion } from "../../../components/UI/AlertaUbicacion";
+import { GpsBadge } from "../../../components/UI/GpsBadge";
 
 // ── Utilidades ───────────────────────────────────────────────────
 const { width: SW } = Dimensions.get("window");
@@ -86,6 +89,7 @@ function MapaZonaEncuestador({
   estadoCalle,
   pendientesOffline = 0,
   tiempoObjetivoMinutos,
+  gpsActivo = false,
   onComenzar,
   onSalir,
   insets = { bottom: 0, top: 0, left: 0, right: 0 },
@@ -95,6 +99,7 @@ function MapaZonaEncuestador({
   estadoCalle: { puede_encuestar: boolean; completadas: number; no_respuesta: number; total: number; cuota: number; restantes: number; config: any; tiempo_promedio_segundos?: number | null } | null;
   pendientesOffline?: number;
   tiempoObjetivoMinutos?: number | null;
+  gpsActivo?: boolean;
   onComenzar: () => void;
   onSalir: () => void;
   insets?: { bottom: number; top: number; left: number; right: number };
@@ -144,6 +149,7 @@ function MapaZonaEncuestador({
           <TouchableOpacity onPress={onSalir} style={mz.backBtn}>
             <Text style={mz.backBtnText}>← Salir</Text>
           </TouchableOpacity>
+          <GpsBadge activo={gpsActivo} />
           {estadoCalle && (
             <Text style={mz.statsText}>
               {estadoCalle.completadas}/{estadoCalle.cuota} encuestas
@@ -364,8 +370,10 @@ function MapaNavegacion({
   onNoHayNadie,
   onNoParcela,
   onSalir,
+  gpsActivo = false,
   insets = { bottom: 0, top: 0, left: 0, right: 0 },
 }: {
+  gpsActivo?: boolean;
   parcela: any;
   ubicacion: { lat: number; lng: number } | null;
   enParcela: boolean;
@@ -390,6 +398,7 @@ function MapaNavegacion({
           <TouchableOpacity onPress={onSalir} style={mn.backBtn}>
             <Text style={mn.backBtnText}>← Salir</Text>
           </TouchableOpacity>
+          <GpsBadge activo={gpsActivo} />
           <Text style={mn.statsText}>
             {stats.completadas}/{stats.total_parcelas} encuestas
           </Text>
@@ -1047,7 +1056,7 @@ export default function EncuestaScreen() {
   const { perfil } = useAuth();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { ubicacion } = useGeofencing(
+  const { ubicacion, gpsActivo } = useGeofencing(
     perfil?.id || "",
     perfil?.organizacion_id || "",
   );
@@ -1094,6 +1103,41 @@ export default function EncuestaScreen() {
   // duración de la encuesta — ver PLAN-tiempo-encuestas-y-mensajes.md, sección 1.
   const inicioRef = useRef<number | null>(null);
   const [duracionSegundos, setDuracionSegundos] = useState<number | null>(null);
+
+  // ── GPS obligatorio ──
+  // Si falla la verificación al iniciar o al guardar, se bloquea la pantalla
+  // con el motivo y no se avanza (ni se guarda) hasta tener una posición válida.
+  const [bloqueoGps, setBloqueoGps] = useState<{
+    estado: EstadoGPS;
+    continuar: (pos: PosicionFresca) => void;
+  } | null>(null);
+  const [verificandoGps, setVerificandoGps] = useState(false);
+
+  // Verifica el GPS; si está bien llama a onOk con la posición fresca, si no
+  // muestra el bloqueo y "Continuar" retoma la misma acción.
+  async function conGpsValido(onOk: (pos: PosicionFresca) => void) {
+    setVerificandoGps(true);
+    const r = await diagnosticarGPS();
+    setVerificandoGps(false);
+    if (r.estado === "ok" && r.posicion) {
+      onOk(r.posicion);
+      return;
+    }
+    setBloqueoGps({
+      estado: r.estado,
+      continuar: (pos) => {
+        setBloqueoGps(null);
+        onOk(pos);
+      },
+    });
+  }
+
+  function comenzarEncuesta() {
+    conGpsValido(() => {
+      inicioRef.current = Date.now();
+      setPantalla(preguntaParticipa ? "participa" : "encuesta");
+    });
+  }
 
   // ── BackHandler — interceptar botón físico de atrás ──
   // usamos ref para que el listener siempre lea el valor actual de pantalla
@@ -1359,7 +1403,28 @@ export default function EncuestaScreen() {
   }
 
   // ── Guardar respuestas (offline-first) ──
-  async function guardarYFinalizar(razon?: string) {
+  async function guardarYFinalizar(razon?: string, posVerificada?: PosicionFresca) {
+    // Sin posición válida NO se guarda: las respuestas quedan en pantalla
+    // y el bloqueo permite reintentar.
+    let pos = posVerificada;
+    if (!pos) {
+      setSaving(true);
+      const r = await diagnosticarGPS();
+      if (r.estado !== "ok" || !r.posicion) {
+        setSaving(false);
+        setBloqueoGps({
+          estado: r.estado,
+          continuar: (p) => {
+            setBloqueoGps(null);
+            guardarYFinalizar(razon, p);
+          },
+        });
+        return;
+      }
+      pos = r.posicion;
+    }
+    const lat = pos.lat;
+    const lng = pos.lng;
     setSaving(true);
     try {
       // Si por algún motivo no se registró el inicio (no debería pasar, onComenzar
@@ -1415,8 +1480,8 @@ export default function EncuestaScreen() {
           "guardar_encuesta_completa",
           {
             p_asignacion_id: asignacion,
-            p_latitud: ubicacion?.lat ?? null,
-            p_longitud: ubicacion?.lng ?? null,
+            p_latitud: lat,
+            p_longitud: lng,
             p_respuestas: filas,
             p_razon_no_respuesta: razon || null,
             p_participa_pregunta_id: preguntaParticipa?.id || null,
@@ -1430,8 +1495,8 @@ export default function EncuestaScreen() {
             await supabase.rpc("registrar_visita", {
               p_parcela_id: parcela.parcela_id,
               p_resultado: razon ? "no_responde" : "completada",
-              p_latitud: ubicacion?.lat ?? null,
-              p_longitud: ubicacion?.lng ?? null,
+              p_latitud: lat,
+              p_longitud: lng,
               p_sesion_id: sesionId,
             });
           }
@@ -1443,8 +1508,8 @@ export default function EncuestaScreen() {
       if (!enviado) {
         await encolarRespuesta({
           asignacion_id: asignacion,
-          latitud: ubicacion?.lat ?? null,
-          longitud: ubicacion?.lng ?? null,
+          latitud: lat,
+          longitud: lng,
           respuestas: filas,
           razon_no_respuesta: razon || null,
           participa_pregunta_id: preguntaParticipa?.id || null,
@@ -1492,6 +1557,24 @@ export default function EncuestaScreen() {
   }
 
   // ══════════════════ RENDER ══════════════════
+  if (bloqueoGps)
+    return (
+      <AlertaUbicacion
+        estadoInicial={bloqueoGps.estado}
+        textoListo="Continuar"
+        onListo={bloqueoGps.continuar}
+        onCancelar={() => setBloqueoGps(null)}
+      />
+    );
+
+  if (verificandoGps)
+    return (
+      <View style={s.centered}>
+        <ActivityIndicator size="large" color="#1a472a" />
+        <Text style={{ marginTop: 12, color: "#666" }}>Verificando GPS...</Text>
+      </View>
+    );
+
   if (loading)
     return (
       <View style={s.centered}>
@@ -1516,10 +1599,8 @@ export default function EncuestaScreen() {
         estadoCalle={estadoCalle}
         pendientesOffline={pendientesOffline}
         tiempoObjetivoMinutos={encuesta?.tiempo_objetivo_minutos}
-        onComenzar={() => {
-          inicioRef.current = Date.now();
-          setPantalla(preguntaParticipa ? "participa" : "encuesta");
-        }}
+        gpsActivo={gpsActivo}
+        onComenzar={comenzarEncuesta}
         onSalir={() => router.back()}
         insets={insets}
       />
@@ -1567,20 +1648,14 @@ export default function EncuestaScreen() {
           onNoHayNadie={() => registrarNoVisita("no_hay_nadie")}
           onNoParcela={() => registrarNoVisita("no_es_vivienda")}
           onSalir={() => router.back()}
+          gpsActivo={gpsActivo}
           insets={insets}
         />
         {/* Botón comenzar — solo visible cuando está frente a la parcela */}
         {enParcela && (
           <TouchableOpacity
             style={[s.btnFlotante, { bottom: insets.bottom + 116 }]}
-            onPress={() => {
-              // Igual que onComenzar del modo callejero: sin esto, en
-              // domiciliaria iniciadaEn caía al momento de guardar y la
-              // duración de la encuesta quedaba en ~0 (falso positivo de
-              // "carga rápida" en el control de calidad del panel).
-              inicioRef.current = Date.now();
-              setPantalla(preguntaParticipa ? "participa" : "encuesta");
-            }}
+            onPress={comenzarEncuesta}
           >
             <Text style={s.btnFlotanteText}>Comenzar encuesta →</Text>
           </TouchableOpacity>
