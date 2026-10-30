@@ -55,13 +55,33 @@ export function useAutoRefetch(callback: () => void, intervalMs = 60_000) {
   }, [intervalMs])
 }
 
+// Cambios en el polígono de una zona de la encuesta (edición desde el panel
+// web) — complementa a useRealtimeAsignaciones, que solo ve altas/bajas de
+// asignación. Si la tabla no está en la publicación realtime no llega nada,
+// y el polling de useAutoRefetch cubre igual.
+export function useRealtimeZonasEncuesta(encuestaId: string, onChange: () => void) {
+  useEffect(() => {
+    if (!encuestaId) return
+    const channel = supabase.channel(`zonas-${encuestaId}`)
+      .on('postgres_changes', {
+        event: '*', schema: 'public',
+        table: 'encuesta_zonas',
+        filter: `encuesta_id=eq.${encuestaId}`,
+      }, onChange)
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [encuestaId])
+}
+
 // Encuestas/zonas asignadas al encuestador cambian vía asignaciones_encuesta
 // (auto_asignar_encuestador, o el panel asignando manualmente). Filtrado por
 // encuestador_id para no recibir cambios de otros encuestadores.
-export function useRealtimeAsignaciones(encuestadorId: string, onChange: () => void) {
+// `sufijo` evita reusar el canal de otra pantalla que siga montada (la home queda
+// en el stack): agregar callbacks a un canal ya suscripto lanza error.
+export function useRealtimeAsignaciones(encuestadorId: string, onChange: () => void, sufijo = '') {
   useEffect(() => {
     if (!encuestadorId) return
-    const channel = supabase.channel(`asignaciones-${encuestadorId}`)
+    const channel = supabase.channel(`asignaciones-${encuestadorId}${sufijo}`)
       .on('postgres_changes', {
         event: '*', schema: 'public',
         table: 'asignaciones_encuesta',

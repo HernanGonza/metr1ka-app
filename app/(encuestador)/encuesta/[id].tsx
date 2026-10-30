@@ -33,6 +33,7 @@ import { useGeofencing } from "../../../hooks/useGeofencing";
 import { diagnosticarGPS, type EstadoGPS, type PosicionFresca } from "../../../lib/location";
 import { AlertaUbicacion } from "../../../components/UI/AlertaUbicacion";
 import { GpsBadge } from "../../../components/UI/GpsBadge";
+import { useAutoRefetch, useRealtimeAsignaciones, useRealtimeZonasEncuesta } from "../../../lib/realtime";
 
 // ── Utilidades ───────────────────────────────────────────────────
 const { width: SW } = Dimensions.get("window");
@@ -1051,7 +1052,12 @@ export default function EncuestaScreen() {
     zonas: string;
   }>();
   // Params de URL siempre son strings — normalizar "null"/"undefined" a null real
-  const asignacion = (_asignacion && _asignacion !== 'null' && _asignacion !== 'undefined') ? _asignacion : null;
+  const asignacionUrl = (_asignacion && _asignacion !== 'null' && _asignacion !== 'undefined') ? _asignacion : null;
+  // Si el panel reasigna la zona, la asignación con la que se entró se borra y se
+  // crea otra: refrescarZonas guarda acá la vigente para que lo que se guarde
+  // desde ahora quede ligado a la asignación (y zona) actual.
+  const [asignacionViva, setAsignacionViva] = useState<string | null>(null);
+  const asignacion = asignacionViva ?? asignacionUrl;
   const zona       = (_zona && _zona !== 'null' && _zona !== 'undefined') ? _zona : null;
   const { perfil } = useAuth();
   const insets = useSafeAreaInsets();
@@ -1071,10 +1077,18 @@ export default function EncuestaScreen() {
   // Estado zona asignada
   const [zonaGeojson, setZonaGeojson] = useState<any>(null);
   // Todas las zonas asignadas (puede ser más de una)
-  const todasLasZonas = useMemo(() => {
+  // Arranca con las zonas que vinieron por parámetro al entrar; si el panel
+  // reasigna o agrega zonas mientras la pantalla está abierta, zonasVivas las
+  // reemplaza (ver refrescarZonas).
+  const zonasParamParseadas = useMemo(() => {
     try { return zonasParam ? JSON.parse(decodeURIComponent(zonasParam)) : [] }
     catch { return [] }
   }, [zonasParam]);
+  const [zonasVivas, setZonasVivas] = useState<any[] | null>(null);
+  const [sinZonas, setSinZonas] = useState(false);
+  const todasLasZonas = zonasVivas ?? zonasParamParseadas;
+  const firmaZonasRef = useRef<string>('');
+  const refrescandoZonasRef = useRef(false);
 
   // Navegación
   const [parcela, setParcela] = useState<any>(null); // próxima parcela
@@ -1184,6 +1198,61 @@ export default function EncuestaScreen() {
       cargarProximaParcela();
     }
   }, [encuesta?.id]);
+
+  // Vuelve a pedir las zonas asignadas a este encuestador en esta encuesta y,
+  // si cambiaron, actualiza el mapa sin salir de la pantalla. Silencioso: ante
+  // un error (p. ej. sin conexión) se queda con las zonas que ya tiene.
+  async function refrescarZonas() {
+    if (!id || !asignacion || !perfil?.id || refrescandoZonasRef.current) return;
+    refrescandoZonasRef.current = true;
+    try {
+      const { data, error } = await supabase.rpc('get_encuestas_encuestador');
+      if (error || !Array.isArray(data)) return;
+      const fila = data.find((e: any) => e.id === id);
+      if (!fila) return; // la encuesta salió de la lista por otro motivo (fechas, estado): no es "sin zonas"
+      // La encuesta sigue visible pero ya no tiene zonas activas para este
+      // encuestador (se las sacaron en el panel): bloquear nuevas encuestas.
+      if (!Array.isArray(fila.todas_las_zonas) || fila.todas_las_zonas.length === 0) {
+        setSinZonas(true);
+        return;
+      }
+      setSinZonas(false);
+      const nuevas = fila.todas_las_zonas;
+      if (!firmaZonasRef.current) firmaZonasRef.current = JSON.stringify(zonasParamParseadas);
+      const firma = JSON.stringify(nuevas);
+      if (firma === firmaZonasRef.current) return;
+      firmaZonasRef.current = firma;
+      // ¿Sigue vigente la asignación actual? Si no (zona reasignada), pasar a la
+      // de la misma zona o, si no hay, a la primera de las nuevas.
+      const vigentes: string[] = nuevas.map((z: any) => z.asignacion_id).filter(Boolean);
+      if (vigentes.length && !vigentes.includes(asignacion)) {
+        const misma = nuevas.find((z: any) => z.zona_id === zona)?.asignacion_id;
+        setAsignacionViva(misma || vigentes[0]);
+      }
+      setZonasVivas(nuevas);
+    } finally {
+      refrescandoZonasRef.current = false;
+    }
+  }
+  // Los listeners de realtime se crean una sola vez: pasar siempre por el ref
+  // para que usen la versión actual de refrescarZonas.
+  const refrescarZonasRef = useRef(refrescarZonas);
+  refrescarZonasRef.current = refrescarZonas;
+  useAutoRefetch(() => { refrescarZonasRef.current(); }, 30_000);
+  useRealtimeAsignaciones(perfil?.id || '', () => { refrescarZonasRef.current(); }, '-mapa');
+  useRealtimeZonasEncuesta(id || '', () => { refrescarZonasRef.current(); });
+
+  // Asignación nueva → recargar cuota/contadores con el id vigente.
+  useEffect(() => {
+    if (asignacionViva && encuesta?.tipo_encuesta === "callejera") cargarEstadoCallejera(asignacionViva);
+  }, [asignacionViva]);
+
+  useEffect(() => {
+    if (!zonasVivas) return;
+    const feats: any[] = [];
+    zonasVivas.forEach((z: any) => { if (z.zona_geojson?.features) feats.push(...z.zona_geojson.features); });
+    setZonaGeojson(feats.length ? { type: 'FeatureCollection', features: feats } : null);
+  }, [zonasVivas]);
 
   async function cargarEncuesta(asignacionParam: string | null) {
     // Bypass rápido para coordinador — solo necesita las preguntas
@@ -1579,6 +1648,28 @@ export default function EncuestaScreen() {
     return (
       <View style={s.centered}>
         <ActivityIndicator size="large" color="#1a472a" />
+      </View>
+    );
+
+  // Sin zonas asignadas: no puede empezar encuestas nuevas. Si está en medio de
+  // una (pantalla distinta de "mapa") puede terminarla; al volver al mapa se bloquea.
+  if (sinZonas && esCallejera && pantalla === "mapa")
+    return (
+      <View style={[s.centered, { padding: 28 }]}>
+        <Text style={{ fontSize: 44, marginBottom: 12 }}>🗺️</Text>
+        <Text style={{ fontSize: 20, fontWeight: "800", color: "#1a472a", textAlign: "center", marginBottom: 8 }}>
+          No tenés zonas asignadas
+        </Text>
+        <Text style={{ fontSize: 14, color: "#555", textAlign: "center", lineHeight: 20, marginBottom: 24 }}>
+          Tu coordinador te sacó de todas las zonas de esta encuesta, así que no podés tomar encuestas nuevas.
+          Si se te asigna una zona, vas a poder seguir desde acá sin salir.
+        </Text>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={{ backgroundColor: "#1a472a", paddingVertical: 14, paddingHorizontal: 32, borderRadius: 12 }}
+        >
+          <Text style={{ color: "#fff", fontWeight: "700", fontSize: 15 }}>Volver</Text>
+        </TouchableOpacity>
       </View>
     );
 
